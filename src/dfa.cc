@@ -488,11 +488,12 @@ void usage(ostream &os, const string &name) {
          << endl
          << "where" << endl
          << "    <prefix> is prefix for all files" << endl
-         << "    K is numer of colors" << endl
+         << "    K is number of colors" << endl
          << endl
          << "For the options," << endl
          << "    --decode to decode model in '<prefix>_<K>_model.cnf' found by minisat" << endl
          << "    --disable-redundant to disable generation of redundant clauses" << endl
+         << "    --find-clique to generate symmetry pruning (not yet implemented)" << endl
          << endl
          ;
 }
