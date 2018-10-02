@@ -84,8 +84,12 @@ class Theory {
   public:
     Theory(const DFA::Sample &S, int K, const DFA::APTA<string> &apta, const Options &options)
       : S_(S), K_(K), apta_(apta), options_(options) {
-        cout << "Theory: parameters:"
-             << " K=" << K_
+        cout << "Theory:"
+             << " parameters:" << " K=" << K_
+             << ", #labels=" << apta_.num_labels()
+             << ", #vertices=" << apta_.num_vertices()
+             << ", #V_accept=" << apta_.accept().size()
+             << ", #V_reject=" << apta_.reject().size()
              << endl;
 
         cout << "-------- variables + literals --------" << endl;
@@ -168,6 +172,7 @@ class Theory {
                 }
             }
         }
+        cout << "Y: #variables=" << variables_.size() - var_offsets_.back().first << " (LK^2), offset=" << var_offsets_.back().first << endl;
     }
     void build_literals() {
         for( size_t i = 0; i < variables_.size(); ++i )
@@ -316,25 +321,25 @@ class Theory {
         imp_offsets_.push_back(make_pair(0, "X"));
         add_comment("Theory for formulas X(v,i)");
         build_formulas_X();
-        cout << "X: #implications=" << implications_.size() - imp_offsets_.back().first << " (?)" << endl;
+        cout << "X: #implications=" << implications_.size() - imp_offsets_.back().first << " (V + V * (K-1) * K / 2 + ?)" << endl;
         //print_implications(cout, imp_offsets_.back().first, implications_.size());
 
         imp_offsets_.push_back(make_pair(implications_.size(), "Y"));
         add_comment("Theory for formulas Y(a,i,j)");
         build_formulas_Y();
-        cout << "Y: #implications=" << implications_.size() - imp_offsets_.back().first << " (?)" << endl;
+        cout << "Y: #implications=" << implications_.size() - imp_offsets_.back().first << " (L * K^2 * (K-1) / 2 + L * K)" << endl;
         //print_implications(cout, imp_offsets_.back().first, implications_.size());
 
         imp_offsets_.push_back(make_pair(implications_.size(), "XZ"));
         add_comment("Theory for formulas X(v,i) and Z(i)");
         build_formulas_XZ();
-        cout << "XZ: #implications=" << implications_.size() - imp_offsets_.back().first << " (?)" << endl;
+        cout << "XZ: #implications=" << implications_.size() - imp_offsets_.back().first << " (K * (V_accept + V_reject))" << endl;
         //print_implications(cout, imp_offsets_.back().first, implications_.size());
 
         imp_offsets_.push_back(make_pair(implications_.size(), "XY"));
         add_comment("Theory for formulas X(v,i) and Y(a,i,j)");
         build_formulas_XY();
-        cout << "XY: #implications=" << implications_.size() - imp_offsets_.back().first << " (?)" << endl;
+        cout << "XY: #implications=" << implications_.size() - imp_offsets_.back().first << " (2 * (V-1) * K^2)" << endl;
         //print_implications(cout, imp_offsets_.back().first, implications_.size());
     }
 
