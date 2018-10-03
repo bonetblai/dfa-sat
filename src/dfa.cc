@@ -428,7 +428,7 @@ class Theory {
         vector<int> color(apta_.num_vertices(), -1);
         vector<vector<int> > group(K_);
         for( int v = 0; v < apta_.num_vertices(); ++v ) {
-            os << "color of vertex v" << v << " is";
+            os << "// color of vertex v" << v << " is";
             for( int i = 0; i < K_; ++i ) {
                 if( model_[X(v, i)] ) {
                     os << " " << i;
@@ -439,24 +439,17 @@ class Theory {
             os << endl;
         }
 
-        // dfa
-        os << "initial state: q" << color[apta_.initial_vertex()] << endl;
+        // extract dfa edges
+        vector<set<pair<int, int> > > dfa_edges(K_);
         for( int i = 0; i < K_; ++i ) {
-            set<pair<int, int> > dfa_edges;
             for( int j = 0; j < group[i].size(); ++j ) {
                 int src = group[i][j];
                 const vector<pair<int, int> > &edges = apta_.edges(src);
                 for( int k = 0; k < edges.size(); ++k ) {
                     int label_index = edges[k].first;
                     int dst = edges[k].second;
-                    dfa_edges.insert(make_pair(label_index, color[dst]));
+                    dfa_edges[i].insert(make_pair(label_index, color[dst]));
                 }
-            }
-
-            for( set<pair<int, int> >::const_iterator it = dfa_edges.begin(); it != dfa_edges.end(); ++it ) {
-                string label = apta_.get_label(it->first);
-                int j = it->second;
-                os << "edge q" << i << " -> q" << j << " w/ label " << label << endl;
             }
         }
 
@@ -464,10 +457,40 @@ class Theory {
         for( set<int>::const_iterator it = apta_.accept().begin(); it != apta_.accept().end(); ++it )
             accepting.insert(color[*it]);
 
-        os << "accepting states:";
+        // output comments
+        os << "// initial state: q" << color[apta_.initial_vertex()] << endl;
+        for( int i = 0; i < K_; ++i ) {
+            for( set<pair<int, int> >::const_iterator it = dfa_edges[i].begin(); it != dfa_edges[i].end(); ++it ) {
+                string label = apta_.get_label(it->first);
+                int j = it->second;
+                os << "// edge q" << i << " -> q" << j << " w/ label " << label << endl;
+            }
+        }
+
+        os << "// accepting states:";
         for( set<int>::const_iterator it = accepting.begin(); it != accepting.end(); ++it )
             os << " q" << *it;
         os << endl;
+
+        if( dot_format ) {
+            os << "digraph dfa {" << endl;
+            os << "    node [shape = point ]; init;" << endl;
+
+            os << "    node [shape = doublecircle];" << endl;
+            for( set<int>::const_iterator it = accepting.begin(); it != accepting.end(); ++it )
+                os << "    q" << *it << ";" << endl;
+
+            os << "    node [shape = circle];" << endl;
+            for( int i = 0; i < K_; ++i ) {
+                for( set<pair<int, int> >::const_iterator it = dfa_edges[i].begin(); it != dfa_edges[i].end(); ++it ) {
+                    string label = apta_.get_label(it->first);
+                    int j = it->second;
+                    os << "    q" << i << " -> q" << j << " [label=\"" << label << "\"];" << endl;
+                }
+            }
+            os << "    init -> q" << color[apta_.initial_vertex()] << ";" << endl;
+            os << "}" << endl;
+        }
     }
 };
 
