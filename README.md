@@ -38,7 +38,7 @@ or equal to m tells that there are p positive samples (i.e.
 strings that should be accepted by the DFA). After this line,
 there are p lines, each containing one string. Each such line
 begins with an integer that tells the length of the string (0
-if the empty string) followed by a blank-separated list of
+if the string is empty) followed by a blank-separated list of
 symbols from the alphabet that make up the string.
 The negative samples are specified in a similar way.
 
