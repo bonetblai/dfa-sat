@@ -62,3 +62,30 @@ with 3 positive samples: ``a``, ``abaa`` and ``bb``, and
 3 negative samples: ``abb``, ``b``, and the empty string.
 
 
+# Executable
+
+The executable src/dfa accepts the following options and arguments
+
+```
+src/dfa [--decode] [--disable-redundant] [--find-clique] <prefix> <K>
+```
+
+where ``<prefix>`` is the prefix for all files, and ``K`` is number of
+colors (states in the DFA). The option ``--decode`` is used to decode
+a model found by minisat. If it is specified, the model is assumed to 
+be in the file ``<prefix>_<K>_model.cnf``. The resulting DFA is
+generated in .dot format in the file ``<prefix>_<K>_dfa.dot``. A PDF
+representation of the DFA can be obtained using ``dot``:
+
+```
+dot -Tpdf <prefix>_<K>_dfa.dot > <prefix>_<K>_dfa.pdf
+```
+
+If the option ``--disable-redundant`` is enabled (not recommended),
+then redundant clauses are not generated. On the other hand, the 
+option ``--find-clique`` (currently not implemted) is used to generated
+extra clauses to break symmetries.
+
+# Examples
+
+The folder examples/ contains some examples.
