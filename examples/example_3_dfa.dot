@@ -1,0 +1,27 @@
+// color of vertex v0 is 1
+// color of vertex v1 is 0
+// color of vertex v2 is 1
+// color of vertex v3 is 0
+// color of vertex v4 is 0
+// color of vertex v5 is 2
+// color of vertex v6 is 0
+// color of vertex v7 is 2
+// initial state: q1
+// edge q0 -> q0 w/ label a
+// edge q0 -> q1 w/ label b
+// edge q1 -> q0 w/ label a
+// edge q1 -> q2 w/ label b
+// edge q2 -> q0 w/ label b
+// accepting states: q0
+digraph dfa {
+    node [shape = point ]; init;
+    node [shape = doublecircle];
+    q0;
+    node [shape = circle];
+    q0 -> q0 [label="a"];
+    q0 -> q1 [label="b"];
+    q1 -> q0 [label="a"];
+    q1 -> q2 [label="b"];
+    q2 -> q0 [label="b"];
+    init -> q1;
+}
