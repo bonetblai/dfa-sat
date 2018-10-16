@@ -60,7 +60,7 @@ For example, the file
 ```
 
 describes a sample of 6 strings over the alphabet { a, b }
-with 3 positive samples: ``a``, ``abaa`` and ``bb``, and
+with 3 positive samples: ``a``, ``abaa``, and ``bb``, and
 3 negative samples: ``abb``, ``b``, and the empty string.
 
 # Executable
