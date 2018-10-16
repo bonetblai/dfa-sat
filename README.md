@@ -68,7 +68,7 @@ with 3 positive samples: ``a``, ``abaa`` and ``bb``, and
 The executable src/dfa accepts the following options and arguments
 
 ```
-src/dfa [--decode] [--disable-redundant] [--find-clique] <prefix> <K>
+src/dfa-sat [--decode] [--disable-redundant] [--find-clique] <prefix> <K>
 ```
 
 where ``<prefix>`` is the prefix for all files, and ``K`` is number of
