@@ -1,5 +1,6 @@
 # dfa-sat
-Learning Deterministic Finite Automata (DFA) from examples using SAT
+
+Learning Deterministic Finite Automata (DFA) from Examples Using SAT
 
 Implements the reduction to SAT for learning (synthesizing) a DFA 
 that accepts a given set of strings, and rejects another given set
@@ -12,7 +13,7 @@ for the theory.
 
 # Build
 
-Got to src/ folder and make 'make'.
+Go to the src/ folder and execute 'make'.
 
 # Format
 
@@ -61,7 +62,6 @@ For example, the file
 describes a sample of 6 strings over the alphabet { a, b }
 with 3 positive samples: ``a``, ``abaa`` and ``bb``, and
 3 negative samples: ``abb``, ``b``, and the empty string.
-
 
 # Executable
 
