@@ -1,11 +1,8 @@
 CXX=clang++
 
-dfa:	dfa.cc sat.h sample.h
-	$(CXX) -std=c++14 -o dfa dfa.cc
-
-dfa.d:	dfa.cc sat.h sample.h
-	$(CXX) -g -std=c++14 -o dfa.d dfa.cc
+dfa-sat:	dfa_sat.cc sat.h sample.h
+		$(CXX) -std=c++14 -o dfa-sat dfa_sat.cc
 
 clean:
-	rm -f *~
+		rm -f dfa-sat *~
 
