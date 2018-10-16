@@ -1,8 +1,9 @@
 # dfa-sat
 Learning Deterministic Finite Automata (DFA) from examples using SAT
 
-Implements a reduction to sat for learning (synthesizing) a DFA 
-that accepts a given set of strings, and rejects another given set. 
+Implements the reduction to SAT for learning (synthesizing) a DFA 
+that accepts a given set of strings, and rejects another given set
+described in [Heule & Verwer, 2010].
 The input for the reduction is a file with the two set of strings
 and an integer N. The output is a CNF theory that is satisfiable
 iff there is a DFA with N states that is compatible with the input
@@ -89,3 +90,8 @@ extra clauses to break symmetries.
 # Examples
 
 The folder examples/ contains some examples.
+
+# Bibliography
+
+* Marijn J.H. Heule and Sicco Verwer. *Exact DFA Identification Using SAT Solvers*.
+Int. Conf. Grammatical Inference (ICGI-2010). Pages 66-79. 2010.
