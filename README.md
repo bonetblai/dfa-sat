@@ -93,10 +93,10 @@ The folder examples/ contains some examples. To run dfa-sat on
 'example' from the examples/ folder, execute:
 
 ```
-../src/dfa-sat example 3
-minisat example_3_theory.cnf example_3_model.cnf
-../src/dfa-sat --decode example 3
-dot -Tpdf example_3_dfa.dot > example_3_dfa.pdf
+../src/dfa-sat example 3                            # generates example_3_theory.cnf
+minisat example_3_theory.cnf example_3_model.cnf    # generates example_3_model.cnf
+../src/dfa-sat --decode example 3                   # generates example_3_dfa.dot
+dot -Tpdf example_3_dfa.dot > example_3_dfa.pdf     # generates example_3_dfa.pdf
 ```
 
 This generates a DFA with 3 states for the strings in ``example_sample.dat``.
@@ -110,7 +110,7 @@ not accept) ``<empty>``, ``b``, and ``abb``. There is no DFA with 1 or
 *negative* strings in the sample).
 
 
-# Bibliography
+# References
 
 * Marijn J.H. Heule and Sicco Verwer. *Exact DFA Identification Using SAT Solvers*.
 Int. Conf. Grammatical Inference (ICGI-2010). Pages 66-79. 2010.
