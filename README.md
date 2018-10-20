@@ -99,8 +99,15 @@ minisat example_3_theory.cnf example_3_model.cnf
 dot -Tpdf example_3_dfa.dot > example_3_dfa.pdf
 ```
 
+This generates a DFA with 3 states for the string in the file `example_sample.dat`.
+The generated DFA is the following:
 
+![alt text](examples/example_3_dfa.jpg)
 
+Clearly, this DFA accepts ``a``, ``bb``, and ``abaa``, and rejects (does 
+not accept) ``<empty>``, ``b``, and ``abb``. There is no DFA with 1 or
+2 states that is compatible with this sample (i.e. with the positive and
+*negative* strings in the sample).
 
 
 # Bibliography
