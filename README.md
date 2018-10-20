@@ -99,7 +99,7 @@ minisat example_3_theory.cnf example_3_model.cnf
 dot -Tpdf example_3_dfa.dot > example_3_dfa.pdf
 ```
 
-This generates a DFA with 3 states for the string in the file `example_sample.dat`.
+This generates a DFA with 3 states for the strings ``example_sample.dat``.
 The generated DFA is the following:
 
 ![alt text](examples/example_3_dfa.jpg)
