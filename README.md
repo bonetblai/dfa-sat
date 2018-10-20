@@ -84,12 +84,24 @@ dot -Tpdf <prefix>_<K>_dfa.dot > <prefix>_<K>_dfa.pdf
 
 If the option ``--disable-redundant`` is enabled (not recommended),
 then redundant clauses are not generated. On the other hand, the 
-option ``--find-clique`` (currently not implemted) is used to generated
-extra clauses to break symmetries.
+option ``--find-clique`` (currently not implemted) is used to generate
+extra clauses to break symmetries in the SAT encoding.
 
 # Examples
 
-The folder examples/ contains some examples.
+The folder examples/ contains some examples. To run dfa-sat on
+'example' from the examples/ folder, execute:
+
+```
+../src/dfa-sat example 3
+minisat example_3_theory.cnf example_3_model.cnf
+../src/dfa-sat --decode example 3
+dot -Tpdf example_3_dfa.dot > example_3_dfa.pdf
+```
+
+
+
+
 
 # Bibliography
 
