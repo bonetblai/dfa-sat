@@ -134,7 +134,7 @@ template<typename T> class APTA {
         assert(g.empty());
         g.add_vertices(num_vertices());
 
-        // initialize queue with all pair of accept/reject states
+        // initialize queue with all pairs of accept/reject states
         std::deque<std::pair<int, int> > queue;
         for( std::set<int>::const_iterator it = accept().begin(); it != accept().end(); ++it ) {
             for( std::set<int>::const_iterator jt = reject().begin(); jt != reject().end(); ++jt ) {
@@ -157,6 +157,7 @@ template<typename T> class APTA {
                 added.insert(p);
                 g.add_edge(p.first, p.second);
 
+                // if label leading to pair states are the same, add pair for parents
                 std::pair<int, int> pa_first = parent(p.first);
                 std::pair<int, int> pa_second = parent(p.second);
                 if( pa_first.second == pa_second.second ) {

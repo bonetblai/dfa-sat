@@ -62,7 +62,7 @@ class Theory {
         Options()
           : redundant_(true),
             redundant_graph_edges_(false),
-            break_symmetries_using_graph_clique_(false),
+            break_symmetries_using_graph_clique_(true),
             decode_(false) {
         }
     };
@@ -580,7 +580,7 @@ const DFA::Sample* read_data(const string &sample_filename) {
 
 void usage(ostream &os, const string &name) {
     cout << endl
-         << "usage: " << name << " [--decode] [--break-symmetries-using-graph-clique] [--disable-redundant] [--enable-redundant-graph-edges] <prefix> <K>" << endl
+         << "usage: " << name << " [--decode] [--disable-redundant] [--disable-symmetries-break-using-graph-clique] [--enable-redundant-graph-edges] <prefix> <K>" << endl
          << endl
          << "where" << endl
          << "    <prefix> is prefix for all files" << endl
@@ -588,8 +588,8 @@ void usage(ostream &os, const string &name) {
          << endl
          << "For the options," << endl
          << "    --decode to decode model in '<prefix>_<K>_model.cnf' found by minisat" << endl
-         << "    --break-symmetries-using-graph-clique to enable assigning fixed colors using graph clique" << endl
          << "    --disable-redundant to disable redundant clauses (except for below options)" << endl
+         << "    --disable-symmetries-break-using-graph-clique to enable assigning fixed colors using graph clique" << endl
          << "    --enable-redundant-graph-edges to enable redundant clauses from graph edges" << endl
          << endl
          ;
@@ -612,10 +612,10 @@ int main(int argc, const char **argv) {
             options.decode_ = true;
         } else if( string(*argv) == "--disable-redundant" ) {
             options.redundant_ = false;
+        } else if( string(*argv) == "--disable-symmetries-break-using-graph-clique" ) {
+            options.break_symmetries_using_graph_clique_ = true;
         } else if( string(*argv) == "--enable-redundant-graph-edges" ) {
             options.redundant_graph_edges_ = true;
-        } else if( string(*argv) == "--break-symmetries-using-graph-clique" ) {
-            options.break_symmetries_using_graph_clique_ = true;
         } else {
             cout << "error: unrecognized option '" << *argv << "'" << endl;
             usage(cout, name);
