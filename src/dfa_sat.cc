@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "graph.h"
 #include "sat.h"
 #include "sample.h"
 
@@ -55,12 +56,14 @@ class Theory {
     struct Options {
         string prefix_;
         bool redundant_;
+        bool redundant_graph_edges_;
+        bool break_symmetries_using_graph_clique_;
         bool decode_;
-        bool find_clique_;
         Options()
           : redundant_(true),
-            decode_(false),
-            find_clique_(false) {
+            redundant_graph_edges_(false),
+            break_symmetries_using_graph_clique_(false),
+            decode_(false) {
         }
     };
 
@@ -92,11 +95,29 @@ class Theory {
              << ", #V_reject=" << apta_.reject().size()
              << endl;
 
-        cout << "-------- variables + literals --------" << endl;
+        cout << "---------------- variables + literals ---------------" << endl;
         build_variables();
         build_literals();
-        cout << "--------- base implications ----------" << endl;
+        cout << "----------------- base implications -----------------" << endl;
         build_base();
+
+        if( options.redundant_graph_edges_ || options.break_symmetries_using_graph_clique_ ) {
+            Graph::Undirected g;
+            apta_.build_induced_undirected_graph(g);
+            //cout << "graph" << endl;
+            //g.dump(cout);
+
+            if( options.redundant_graph_edges_ ) {
+                cout << "---- add redundant implications from graph edges ----" << endl;
+                add_implications_from_graph_edges(g);
+            }
+
+            if( options.break_symmetries_using_graph_clique_ ) {
+                cout << "------------- add clauses from clique ---------------" << endl;
+                break_symmetries_using_graph_clique(g);
+            }
+        }
+        cout << "-----------------------------------------------------" << endl;
     }
     virtual ~Theory() {
         for( size_t i = 0; i < implications_.size(); ++i )
@@ -227,12 +248,6 @@ class Theory {
                 }
             }
         }
-
-        // determinization conflicts (redundant)
-        // -x(v,i) v -x(w,i) for each color i and conflict edge (v,e)
-        if( options_.redundant_ ) {
-            //assert(0); // CHECK
-        }
     }
 
     void build_formulas_Y() {
@@ -341,6 +356,59 @@ class Theory {
         build_formulas_XY();
         cout << "XY: #implications=" << implications_.size() - imp_offsets_.back().first << " (2 * (V-1) * K^2)" << endl;
         //print_implications(cout, imp_offsets_.back().first, implications_.size());
+    }
+
+    void add_implications_from_graph_edges(const Graph::Undirected &g) {
+        imp_offsets_.push_back(make_pair(implications_.size(), "edges"));
+        add_comment(string("Redundant clauses from graph edges: #vertices=") + to_string(g.num_vertices()) + " #edges=" + to_string(g.num_edges() >> 1));
+        for( int src = 0; src < g.num_vertices(); ++src ) {
+            const vector<int> &edges = g.edges(src);
+            for( size_t i = 0; i < edges.size(); ++i ) {
+                int dst = edges[i];
+                assert(src != dst);
+                if( src < dst ) {
+                    // add constraint: color(src) != color(dst)
+                    for( int i = 0; i < K_; ++i ) {
+                        SAT::Implication *IP = new SAT::Implication;
+                        IP->add_consequent(-(1 + X(src, i)));
+                        IP->add_consequent(-(1 + X(dst, i)));
+                        add_implication(IP);
+                    }
+                }
+            }
+        }
+        cout << "#implications=" << implications_.size() - imp_offsets_.back().first << endl;
+    }
+
+    void break_symmetries_using_graph_clique(const Graph::Undirected &g) {
+        // calculate accept/reject cliques
+        set<int> accept_clique, reject_clique;
+        g.find_large_clique_greedy(apta_.accept(), accept_clique);
+        g.find_large_clique_greedy(apta_.reject(), reject_clique);
+
+        // merge accept/reject cliques into bigger clique
+        set<int> clique;
+        clique.insert(accept_clique.begin(), accept_clique.end());
+        clique.insert(reject_clique.begin(), reject_clique.end());
+        assert(clique.size() == accept_clique.size() + reject_clique.size());
+
+        // if not enough color, add empty clause, else assign different color to vertices in clique
+        imp_offsets_.push_back(make_pair(implications_.size(), "clique"));
+        add_comment(string("Theory for breaking symmetries: #vertices=") + to_string(g.num_vertices()) + " #edges=" + to_string(g.num_edges() >> 1) + " clique-size=" + to_string(clique.size()));
+        if( K_ < clique.size() ) {
+            SAT::Implication *IP = new SAT::Implication;
+            add_implication(IP);
+        } else {
+            int color = 0;
+            for( set<int>::const_iterator it = clique.begin(); it != clique.end(); ++it, ++color ) {
+                // assign color to vertex *it
+                assert(color < K_);
+                SAT::Implication *IP = new SAT::Implication;
+                IP->add_consequent(1 + X(*it, color));
+                add_implication(IP);
+            }
+        }
+        cout << "#implications=" << implications_.size() - imp_offsets_.back().first << endl;
     }
 
     // readers
@@ -512,7 +580,7 @@ const DFA::Sample* read_data(const string &sample_filename) {
 
 void usage(ostream &os, const string &name) {
     cout << endl
-         << "usage: " << name << " [--decode] [--disable-redundant] [--find-clique] <prefix> <K>" << endl
+         << "usage: " << name << " [--decode] [--break-symmetries-using-graph-clique] [--disable-redundant] [--enable-redundant-graph-edges] <prefix> <K>" << endl
          << endl
          << "where" << endl
          << "    <prefix> is prefix for all files" << endl
@@ -520,8 +588,9 @@ void usage(ostream &os, const string &name) {
          << endl
          << "For the options," << endl
          << "    --decode to decode model in '<prefix>_<K>_model.cnf' found by minisat" << endl
-         << "    --disable-redundant to disable generation of redundant clauses" << endl
-         << "    --find-clique to generate symmetry pruning (not yet implemented)" << endl
+         << "    --break-symmetries-using-graph-clique to enable assigning fixed colors using graph clique" << endl
+         << "    --disable-redundant to disable redundant clauses (except for below options)" << endl
+         << "    --enable-redundant-graph-edges to enable redundant clauses from graph edges" << endl
          << endl
          ;
 }
@@ -543,8 +612,10 @@ int main(int argc, const char **argv) {
             options.decode_ = true;
         } else if( string(*argv) == "--disable-redundant" ) {
             options.redundant_ = false;
-        } else if( string(*argv) == "--find-clique" ) {
-            options.find_clique_ = true;
+        } else if( string(*argv) == "--enable-redundant-graph-edges" ) {
+            options.redundant_graph_edges_ = true;
+        } else if( string(*argv) == "--break-symmetries-using-graph-clique" ) {
+            options.break_symmetries_using_graph_clique_ = true;
         } else {
             cout << "error: unrecognized option '" << *argv << "'" << endl;
             usage(cout, name);

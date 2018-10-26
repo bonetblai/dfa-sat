@@ -3,9 +3,12 @@
 
 #include <cassert>
 #include <iostream>
+#include <deque>
 #include <map>
 #include <set>
 #include <vector>
+
+#include "graph.h"
 
 namespace DFA {
 
@@ -77,6 +80,14 @@ template<typename T> class APTA {
         }
         return -1;
     }
+    bool is_edge(int src, int dst) const {
+        assert((0 <= src) && (src < num_vertices_));
+        for( size_t i = 0; i < edges_[src].size(); ++i ) {
+            if( edges_[src][i].second == dst )
+                return true;
+        }
+        return false;
+    }
     const std::vector<std::pair<int, int> >& edges(int src) const {
         assert((0 <= src) && (src < num_vertices_));
         return edges_[src];
@@ -115,6 +126,47 @@ template<typename T> class APTA {
         assert((0 <= vertex) && (vertex < num_vertices_));
         assert(accept_vertices_.find(vertex) == accept_vertices_.end());
         reject_vertices_.insert(vertex);
+    }
+
+    // operations
+    void build_induced_undirected_graph(Graph::Undirected &g) const {
+        // initialize empty graph
+        assert(g.empty());
+        g.add_vertices(num_vertices());
+
+        // initialize queue with all pair of accept/reject states
+        std::deque<std::pair<int, int> > queue;
+        for( std::set<int>::const_iterator it = accept().begin(); it != accept().end(); ++it ) {
+            for( std::set<int>::const_iterator jt = reject().begin(); jt != reject().end(); ++jt ) {
+                assert(*it != *jt);
+                if( *it < *jt )
+                    queue.emplace_back(*it, *jt);
+                else
+                    queue.emplace_back(*jt, *it);
+            }
+        }
+
+        // process queue while keeping record of added edges
+        std::set<std::pair<int, int> > added;
+        while( !queue.empty() ) {
+            std::pair<int, int> p = queue.front();
+            assert(p.first < p.second);
+            queue.pop_front();
+
+            if( added.find(p) == added.end() ) {
+                added.insert(p);
+                g.add_edge(p.first, p.second);
+
+                std::pair<int, int> pa_first = parent(p.first);
+                std::pair<int, int> pa_second = parent(p.second);
+                if( pa_first.second == pa_second.second ) {
+                    if( pa_first.first < pa_second.first )
+                        queue.emplace_back(pa_first.first, pa_second.first);
+                    else if( pa_first.first > pa_second.first )
+                        queue.emplace_back(pa_second.first, pa_first.first);
+                }
+            }
+        }
     }
 };
 
