@@ -125,7 +125,7 @@ template<typename T> class DFA {
             accept_.insert(nq);
         }
         for( int i = 0; i < num_states_; ++i ) {
-            for( size_t j = 0; j < edges_[i].size(); ++i ) {
+            for( size_t j = 0; j < edges_[i].size(); ++j ) {
                 if( edges_[i][j].second == q )
                     edges_[i][j].second = nq;
             }
@@ -146,7 +146,6 @@ template<typename T> class DFA {
             }
 
             if( sink != -1 ) {
-                std::cout << "(sink=" << sink << ")" << std::flush;
                 // swap sink and last state
                 if( sink < num_states_ - 1 ) {
                     subst_state_name(sink, num_states_);
@@ -158,6 +157,7 @@ template<typename T> class DFA {
                     subst_state_name(num_states_ - 1, sink);
 
                     subst_state_name(num_states_, num_states_ - 1);
+                    sink = num_states_ - 1;
                 }
 
                 // remove last state
@@ -183,10 +183,14 @@ template<typename T> class DFA {
 
     // input/out
     void dump(std::ostream &os) {
-        os << num_states_ << " " << num_labels_ << " " << initial_state_ << std::endl;
+        os << num_states_ << " " << initial_state_ << std::endl;
         os << num_labels_;
         for( typename std::map<T, int>::const_iterator it = labels_map_.begin(); it != labels_map_.end(); ++it )
             os << " " << it->first;
+        os << std::endl;
+        os << accept_.size();
+        for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it )
+            os << " " << *it;
         os << std::endl;
         for( int q = 0; q < num_states_; ++q ) {
             os << edges_[q].size();

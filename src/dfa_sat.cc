@@ -489,7 +489,7 @@ class Theory {
     }
 
     // print abstraction coded in model
-    void decode_model(const string &name, ostream &os, bool dot_format) const {
+    void decode_model(DFA::DFA<string> &dfa) const {
         assert(satisfiable_ && (model_.size() == variables_.size()));
         //print_model(cout);
 
@@ -507,7 +507,7 @@ class Theory {
         }
 
         // build DFA
-        DFA::DFA<string> dfa(K_);
+        assert(K_ == dfa.num_states());
         for( int i = 0; i < K_; ++i ) {
             for( int j = 0; j < group[i].size(); ++j ) {
                 int src = group[i][j];
@@ -536,11 +536,6 @@ class Theory {
 
         // simplify
         dfa.remove_redundant_non_accepting_states();
-
-        // output
-        if( dot_format ) {
-            dfa.dump_dot(os);
-        }
     }
 };
 
@@ -638,12 +633,24 @@ int main(int argc, const char **argv) {
             ifs.close();
             cout << " done!" << endl;
 
-            // output model in .dot format
+            // get dfa from model
+            DFA::DFA<string> dfa(K);
+            Th.decode_model(dfa);
+
+            // output dfa in .dot format
             string dot_filename = filename(options.prefix_, K, "_dfa.dot");
             cout << "writing file '" << dot_filename << "' ..." << flush;
-            ofstream os(dot_filename.c_str());
-            Th.decode_model(model_filename, os, true);
-            os.close();
+            ofstream dot_os(dot_filename.c_str());
+            dfa.dump_dot(dot_os);
+            dot_os.close();
+            cout << " done!" << endl;
+
+            // output dfa in .dfa format
+            string dfa_filename = filename(options.prefix_, K, ".dfa");
+            cout << "writing file '" << dfa_filename << "' ..." << flush;
+            ofstream dfa_os(dfa_filename.c_str());
+            dfa.dump(dfa_os);
+            dfa_os.close();
             cout << " done!" << endl;
         } else {
             cout << "error: opening file '" << model_filename << "'" << endl;
