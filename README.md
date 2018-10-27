@@ -68,7 +68,7 @@ with 3 positive samples: ``a``, ``abaa``, and ``bb``, and
 The executable src/dfa accepts the following options and arguments
 
 ```
-src/dfa-sat [--decode] [--disable-redundant] [--find-clique] <prefix> <K>
+src/dfa-sat [--decode] [--disable-redundant] [--disable-symmetries-break-using-graph-clique] [--enable-redundant-graph-edges] <prefix> <K>
 ```
 
 where ``<prefix>`` is the prefix for all files, and ``K`` is number of
@@ -83,9 +83,16 @@ dot -Tpdf <prefix>_<K>_dfa.dot > <prefix>_<K>_dfa.pdf
 ```
 
 If the option ``--disable-redundant`` is enabled (not recommended),
-then redundant clauses are not generated. On the other hand, the 
-option ``--find-clique`` (currently not implemted) is used to generate
-extra clauses to break symmetries in the SAT encoding.
+then redundant clauses are not generated. 
+The option ``--disable-symmetries-break-using-graph-clique`` disables 
+the generation of clauses that break symmetries which can be specially 
+effective when there is no solution for a given ``K``. It is not 
+recommended to disable such clauses.
+The option ``--enable-redundant-graph-edges`` is used to add clauses
+associated with the edges of the induced undirected graph. The number
+of such edges, and thus clauses, may be quite large. Since these are
+redundant clauses, we don't recommend the use of this option in 
+general. However, it could be useful in some cases.
 
 # Examples
 
