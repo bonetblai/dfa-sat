@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "dfa.h"
 #include "graph.h"
 #include "sat.h"
 #include "sample.h"
@@ -496,68 +497,49 @@ class Theory {
         vector<int> color(apta_.num_vertices(), -1);
         vector<vector<int> > group(K_);
         for( int v = 0; v < apta_.num_vertices(); ++v ) {
-            os << "// color of vertex v" << v << " is";
             for( int i = 0; i < K_; ++i ) {
                 if( model_[X(v, i)] ) {
-                    os << " " << i;
                     color[v] = i;
                     group[i].push_back(v);
                 }
             }
-            os << endl;
+            //os << "// color of vertex v" << v << " is " << color[v] << endl;
         }
 
-        // extract dfa edges
-        vector<set<pair<int, int> > > dfa_edges(K_);
+        // build DFA
+        DFA::DFA<string> dfa(K_);
         for( int i = 0; i < K_; ++i ) {
             for( int j = 0; j < group[i].size(); ++j ) {
                 int src = group[i][j];
                 const vector<pair<int, int> > &edges = apta_.edges(src);
                 for( int k = 0; k < edges.size(); ++k ) {
                     int label_index = edges[k].first;
-                    int dst = edges[k].second;
-                    dfa_edges[i].insert(make_pair(label_index, color[dst]));
+                    const string &label = apta_.get_label(label_index);
+                    label_index = dfa.get_label_index(label);
+                    if( label_index == -1 ) label_index = dfa.add_label(label);
+                    int dst = dfa.edge(color[src], label_index);
+                    if( dst == -1 ) {
+                        dst = edges[k].second;
+                        //cout << "dfa: add_edge: src=" << color[src] << ", dst=" << color[dst] << ", label=|" << label << "|" << endl;
+                        dfa.add_edge(color[src], label_index, color[dst]);
+                    } else {
+                        assert(dst == color[edges[k].second]);
+                    }
                 }
             }
         }
 
-        set<int> accepting;
+        // set initial and accepting states
+        dfa.set_initial_state(color[apta_.initial_vertex()]);
         for( set<int>::const_iterator it = apta_.accept().begin(); it != apta_.accept().end(); ++it )
-            accepting.insert(color[*it]);
+            dfa.mark_as_accept(color[*it]);
 
-        // output comments
-        os << "// initial state: q" << color[apta_.initial_vertex()] << endl;
-        for( int i = 0; i < K_; ++i ) {
-            for( set<pair<int, int> >::const_iterator it = dfa_edges[i].begin(); it != dfa_edges[i].end(); ++it ) {
-                string label = apta_.get_label(it->first);
-                int j = it->second;
-                os << "// edge q" << i << " -> q" << j << " w/ label " << label << endl;
-            }
-        }
+        // simplify
+        dfa.remove_redundant_non_accepting_states();
 
-        os << "// accepting states:";
-        for( set<int>::const_iterator it = accepting.begin(); it != accepting.end(); ++it )
-            os << " q" << *it;
-        os << endl;
-
+        // output
         if( dot_format ) {
-            os << "digraph dfa {" << endl;
-            os << "    node [shape = point ]; init;" << endl;
-
-            os << "    node [shape = doublecircle];" << endl;
-            for( set<int>::const_iterator it = accepting.begin(); it != accepting.end(); ++it )
-                os << "    q" << *it << ";" << endl;
-
-            os << "    node [shape = circle];" << endl;
-            for( int i = 0; i < K_; ++i ) {
-                for( set<pair<int, int> >::const_iterator it = dfa_edges[i].begin(); it != dfa_edges[i].end(); ++it ) {
-                    string label = apta_.get_label(it->first);
-                    int j = it->second;
-                    os << "    q" << i << " -> q" << j << " [label=\"" << label << "\"];" << endl;
-                }
-            }
-            os << "    init -> q" << color[apta_.initial_vertex()] << ";" << endl;
-            os << "}" << endl;
+            dfa.dump_dot(os);
         }
     }
 };
