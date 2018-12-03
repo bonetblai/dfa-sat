@@ -392,6 +392,7 @@ class Theory {
         clique.insert(accept_clique.begin(), accept_clique.end());
         clique.insert(reject_clique.begin(), reject_clique.end());
         assert(clique.size() == accept_clique.size() + reject_clique.size());
+        cout << "clique: size=" << clique.size() << ", accept-clique.size=" << accept_clique.size() << ", reject-clique.size=" << reject_clique.size() << endl;
 
         // if not enough color, add empty clause, else assign different color to vertices in clique
         imp_offsets_.push_back(make_pair(implications_.size(), "clique"));
