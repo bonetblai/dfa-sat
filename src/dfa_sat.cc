@@ -99,14 +99,18 @@ class Theory {
         cout << "---------------- variables + literals ---------------" << endl;
         build_variables();
         build_literals();
+        cout << "done with variables + literals" << endl;
         cout << "----------------- base implications -----------------" << endl;
         build_base();
+        cout << "done with base implications" << endl;
 
         if( options.redundant_graph_edges_ || options.break_symmetries_using_graph_clique_ ) {
             Graph::Undirected g;
+            cout << "----------- constructing undirected graph -----------" << endl;
             apta_.build_induced_undirected_graph(g);
             //cout << "graph" << endl;
             //g.dump(cout);
+            cout << "done constructing graph" << endl;
 
             if( options.redundant_graph_edges_ ) {
                 cout << "---- add redundant implications from graph edges ----" << endl;
