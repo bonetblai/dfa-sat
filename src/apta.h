@@ -134,37 +134,41 @@ template<typename T> class APTA {
         assert(g.empty());
         g.add_vertices(num_vertices());
 
-        // initialize queue with all pairs of accept/reject states
+        // for efficiency, instead of initializing queue with all pairs of accept/reject states,
+        // we process each such pair independently but keeping track of added edges
+        std::set<std::pair<int, int> > added;
         std::deque<std::pair<int, int> > queue;
         for( std::set<int>::const_iterator it = accept().begin(); it != accept().end(); ++it ) {
             for( std::set<int>::const_iterator jt = reject().begin(); jt != reject().end(); ++jt ) {
+                assert(queue.empty());
                 assert(*it != *jt);
+
+                // initialize queue
                 if( *it < *jt )
                     queue.emplace_back(*it, *jt);
                 else
                     queue.emplace_back(*jt, *it);
-            }
-        }
 
-        // process queue while keeping record of added edges
-        std::set<std::pair<int, int> > added;
-        while( !queue.empty() ) {
-            std::pair<int, int> p = queue.front();
-            assert(p.first < p.second);
-            queue.pop_front();
+                // process queue until completion
+                while( !queue.empty() ) {
+                    std::pair<int, int> p = queue.front();
+                    assert(p.first < p.second);
+                    queue.pop_front();
 
-            if( added.find(p) == added.end() ) {
-                added.insert(p);
-                g.add_edge(p.first, p.second);
+                    if( added.find(p) == added.end() ) {
+                        added.insert(p);
+                        g.add_edge(p.first, p.second);
 
-                // if label leading to pair states are the same, add pair for parents
-                std::pair<int, int> pa_first = parent(p.first);
-                std::pair<int, int> pa_second = parent(p.second);
-                if( pa_first.second == pa_second.second ) {
-                    if( pa_first.first < pa_second.first )
-                        queue.emplace_back(pa_first.first, pa_second.first);
-                    else if( pa_first.first > pa_second.first )
-                        queue.emplace_back(pa_second.first, pa_first.first);
+                        // if label leading to pair states are the same, add pair for parents
+                        std::pair<int, int> pa_first = parent(p.first);
+                        std::pair<int, int> pa_second = parent(p.second);
+                        if( pa_first.second == pa_second.second ) {
+                            if( pa_first.first < pa_second.first )
+                                queue.emplace_back(pa_first.first, pa_second.first);
+                            else if( pa_first.first > pa_second.first )
+                                queue.emplace_back(pa_second.first, pa_first.first);
+                        }
+                    }
                 }
             }
         }

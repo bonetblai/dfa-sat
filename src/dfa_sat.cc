@@ -99,38 +99,37 @@ class Theory {
         cout << "---------------- variables + literals ---------------" << endl;
         build_variables();
         build_literals();
-        cout << "done with variables + literals" << endl;
-        cout << "----------------- base implications -----------------" << endl;
-        build_base();
-        cout << "done with base implications" << endl;
 
-        if( options.redundant_graph_edges_ || options.break_symmetries_using_graph_clique_ ) {
-            Graph::Undirected g;
-            cout << "----------- constructing undirected graph -----------" << endl;
-            apta_.build_induced_undirected_graph(g);
-            //cout << "graph" << endl;
-            //g.dump(cout);
-            cout << "done constructing graph" << endl;
+        if( !options.decode_ ) {
+            cout << "----------------- base implications -----------------" << endl;
+            build_base();
 
-            if( options.redundant_graph_edges_ ) {
-                cout << "---- add redundant implications from graph edges ----" << endl;
-                add_implications_from_graph_edges(g);
-            }
+            if( options.redundant_graph_edges_ || options.break_symmetries_using_graph_clique_ ) {
+                Graph::Undirected g;
+                cout << "----------- constructing undirected graph -----------" << endl;
+                cout << "apta: #accept=" << apta_.accept().size() << ", #reject=" << apta_.reject().size() << endl;
+                apta_.build_induced_undirected_graph(g);
+                //cout << "graph" << endl;
+                //g.dump(cout);
+                cout << "undirected graph: #vertices=" << g.num_vertices() << ", #edges=" << g.num_edges() << std::endl;
 
-            if( options.break_symmetries_using_graph_clique_ ) {
-                cout << "------------- add clauses from clique ---------------" << endl;
-                break_symmetries_using_graph_clique(g);
+                if( options.redundant_graph_edges_ ) {
+                    cout << "---- add redundant implications from graph edges ----" << endl;
+                    add_implications_from_graph_edges(g);
+                }
+
+                if( options.break_symmetries_using_graph_clique_ ) {
+                    cout << "------------- add clauses from clique ---------------" << endl;
+                    break_symmetries_using_graph_clique(g);
+                }
             }
         }
         cout << "-----------------------------------------------------" << endl;
     }
     virtual ~Theory() {
-        for( size_t i = 0; i < implications_.size(); ++i )
-            delete implications_[i];
-        for( size_t i = 0; i < literals_.size(); ++i )
-            delete literals_[i];
-        for( size_t i = 0; i < variables_.size(); ++i )
-            delete variables_[i];
+        clear_implications();
+        clear_literals();
+        clear_variables();
     }
 
     const SAT::Var& variable(int index) const {
@@ -142,18 +141,35 @@ class Theory {
         assert((-int(literals_.size()) <= index) && (index <= int(literals_.size())));
         return index > 0 ? *literals_[index - 1] : *literals_[variables_.size() + -index - 1];
     }
+
+    void clear_variables() {
+        for( size_t i = 0; i < variables_.size(); ++i )
+            delete variables_[i];
+        variables_.clear();
+    }
+    void clear_literals() {
+        for( size_t i = 0; i < literals_.size(); ++i )
+            delete literals_[i];
+        literals_.clear();
+    }
     int num_variables() const {
         return variables_.size();
     }
 
+    void clear_implications() {
+        for( size_t i = 0; i < implications_.size(); ++i )
+            delete implications_[i];
+        implications_.clear();
+    }
     void add_implication(const SAT::Implication *IP) {
         implications_.push_back(IP);
     }
-    void add_comment(const string &comment) {
-        comments_.push_back(make_pair(implications_.size(), comment));
-    }
     int num_implications() const {
         return implications_.size();
+    }
+
+    void add_comment(const string &comment) {
+        comments_.push_back(make_pair(implications_.size(), comment));
     }
 
     bool satisfiable() const {
@@ -402,6 +418,7 @@ class Theory {
         imp_offsets_.push_back(make_pair(implications_.size(), "clique"));
         add_comment(string("Theory for breaking symmetries: #vertices=") + to_string(g.num_vertices()) + " #edges=" + to_string(g.num_edges() >> 1) + " clique-size=" + to_string(clique.size()));
         if( K_ < clique.size() ) {
+            clear_implications();
             SAT::Implication *IP = new SAT::Implication;
             add_implication(IP);
         } else {
