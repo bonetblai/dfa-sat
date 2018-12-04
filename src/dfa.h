@@ -181,8 +181,8 @@ template<typename T> class DFA {
         }
     }
 
-    // input/out
-    void dump(std::ostream &os) {
+    // output
+    void dump(std::ostream &os) const {
         os << num_states_ << " " << initial_state_ << std::endl;
         os << num_labels_;
         for( typename std::map<T, int>::const_iterator it = labels_map_.begin(); it != labels_map_.end(); ++it )
@@ -202,9 +202,9 @@ template<typename T> class DFA {
             os << std::endl;
         }
     }
-    void dump_dot(std::ostream &os) {
+    void dump_dot(std::ostream &os) const {
         // output comments
-        os << "// initial state: q" << initial_state_ << std::endl;
+        if( initial_state_ != -1 ) os << "// initial state: q" << initial_state_ << std::endl;
         os << "// accepting states:";
         for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it )
             os << " q" << *it;
@@ -219,7 +219,7 @@ template<typename T> class DFA {
         }
 
         os << "digraph dfa {" << std::endl;
-        os << "    node [shape = point ]; init;" << std::endl;
+        if( initial_state_ != -1 ) os << "    node [shape = point ]; init;" << std::endl;
         os << "    node [shape = doublecircle];" << std::endl;
         for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it )
             os << "    q" << *it << ";" << std::endl;
@@ -232,8 +232,60 @@ template<typename T> class DFA {
                 os << "    q" << q << " -> q" << t << " [label=\"" << label << "\"];" << std::endl;
             }
         }
-        os << "    init -> q" << initial_state_ << ";" << std::endl;
+        if( initial_state_ != -1 ) os << "    init -> q" << initial_state_ << ";" << std::endl;
         os << "}" << std::endl;
+    }
+
+    void read(std::istream &is) {
+        int num_states, initial_state;
+        is >> num_states >> initial_state;
+
+        // add states and set initial state
+        for( int i = 0; i < num_states; ++i )
+            add_state();
+        set_initial_state(initial_state);
+
+        // read labels
+        int num_labels;
+        is >> num_labels;
+        for( int i = 0; i < num_labels; ++i ) {
+            T label;
+            is >> label;
+            add_label(label);
+        }
+
+        // add accepting states
+        int num_accepting_states;
+        is >> num_accepting_states;
+        for( int i = 0; i < num_accepting_states; ++i ) {
+            int accepting_state;
+            is >> accepting_state;
+            mark_as_accept(accepting_state);
+        }
+
+        // read edges
+        for( int src = 0; src < num_states; ++src ) {
+            int num_edges;
+            is >> num_edges;
+            for( int i = 0; i < num_edges; ++i ) {
+                T label;
+                int dst;
+                is >> label >> dst;
+                int label_index = get_label_index(label);
+                if( (label_index == -1) || (dst < 0) || (dst >= num_states) ) {
+                    std::cout << "warning: unrecognized label '" << label << "'."
+                              << " Skipping edge: (" << src << "," << label << "," << dst << ")"
+                              << std::endl;
+                    continue;
+                }
+                add_edge(src, label_index, dst);
+            }
+        }
+    }
+    static const DFA<T>* read_dump(std::istream &is) {
+        DFA<T> *dfa = new DFA();
+        dfa->read(is);
+        return dfa;
     }
 };
 
