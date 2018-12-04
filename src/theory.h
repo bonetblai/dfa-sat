@@ -115,12 +115,15 @@ class Theory {
             model_ = std::vector<bool>(variables_.size(), false);
             for( size_t i = 0; i < variables_.size(); ++i ) {
                 is >> lit;
+                if( lit == 0 ) break;
                 var = lit > 0 ? lit - 1 : -lit - 1;
                 assert(var == int(i));
                 model_[var] = lit > 0;
             }
-            is >> lit;
-            assert(lit == 0);
+            if( lit != 0 ) {
+                is >> lit;
+                assert(lit == 0);
+            }
         } else {
             model_.clear();
         }
