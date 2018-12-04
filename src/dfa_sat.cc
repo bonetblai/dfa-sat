@@ -8,8 +8,8 @@
 
 #include "dfa.h"
 #include "graph.h"
-#include "sat.h"
 #include "sample.h"
+#include "theory.h"
 
 using namespace std;
 
@@ -52,7 +52,7 @@ class Items : public set<T> {
     }
 };
 
-class Theory {
+class Theory : public SAT::Theory {
   public:
     struct Options {
         string prefix_;
@@ -74,112 +74,7 @@ class Theory {
     const DFA::APTA<string> &apta_;
     const Options options_;
 
-    vector<pair<int, string> > var_offsets_;
-    vector<const SAT::Var*> variables_;
-    vector<const SAT::Literal*> literals_;
-
-    vector<pair<int, const string> > comments_;
-    vector<const SAT::Implication*> implications_;
-    vector<pair<int, string> > imp_offsets_;
-
-    mutable bool satisfiable_;
-    mutable vector<bool> model_;
-
-  public:
-    Theory(const DFA::Sample &S, int K, const DFA::APTA<string> &apta, const Options &options)
-      : S_(S), K_(K), apta_(apta), options_(options) {
-        cout << "Theory:"
-             << " parameters:" << " K=" << K_
-             << ", #labels=" << apta_.num_labels()
-             << ", #vertices=" << apta_.num_vertices()
-             << ", #V_accept=" << apta_.accept().size()
-             << ", #V_reject=" << apta_.reject().size()
-             << endl;
-
-        cout << "---------------- variables + literals ---------------" << endl;
-        build_variables();
-        build_literals();
-
-        if( !options.decode_ ) {
-            cout << "----------------- base implications -----------------" << endl;
-            build_base();
-
-            if( options.redundant_graph_edges_ || options.break_symmetries_using_graph_clique_ ) {
-                Graph::Undirected g;
-                cout << "----------- constructing undirected graph -----------" << endl;
-                cout << "apta: #accept=" << apta_.accept().size() << ", #reject=" << apta_.reject().size() << endl;
-                apta_.build_induced_undirected_graph(g);
-                //cout << "graph" << endl;
-                //g.dump(cout);
-                cout << "undirected graph: #vertices=" << g.num_vertices() << ", #edges=" << g.num_edges() << std::endl;
-
-                if( options.redundant_graph_edges_ ) {
-                    cout << "---- add redundant implications from graph edges ----" << endl;
-                    add_implications_from_graph_edges(g);
-                }
-
-                if( options.break_symmetries_using_graph_clique_ ) {
-                    cout << "------------- add clauses from clique ---------------" << endl;
-                    break_symmetries_using_graph_clique(g);
-                }
-            }
-        }
-        cout << "-----------------------------------------------------" << endl;
-    }
-    virtual ~Theory() {
-        clear_implications();
-        clear_literals();
-        clear_variables();
-    }
-
-    const SAT::Var& variable(int index) const {
-        assert((0 <= index) && (index < variables_.size()));
-        return *variables_[index];
-    }
-    const SAT::Literal& literal(int index) const {
-        assert(index != 0);
-        assert((-int(literals_.size()) <= index) && (index <= int(literals_.size())));
-        return index > 0 ? *literals_[index - 1] : *literals_[variables_.size() + -index - 1];
-    }
-
-    void clear_variables() {
-        for( size_t i = 0; i < variables_.size(); ++i )
-            delete variables_[i];
-        variables_.clear();
-    }
-    void clear_literals() {
-        for( size_t i = 0; i < literals_.size(); ++i )
-            delete literals_[i];
-        literals_.clear();
-    }
-    int num_variables() const {
-        return variables_.size();
-    }
-
-    void clear_implications() {
-        for( size_t i = 0; i < implications_.size(); ++i )
-            delete implications_[i];
-        implications_.clear();
-    }
-    void add_implication(const SAT::Implication *IP) {
-        implications_.push_back(IP);
-    }
-    int num_implications() const {
-        return implications_.size();
-    }
-
-    void add_comment(const string &comment) {
-        comments_.push_back(make_pair(implications_.size(), comment));
-    }
-
-    bool satisfiable() const {
-        return satisfiable_;
-    }
-    const vector<bool>& model() const {
-        return model_;
-    }
-
-    void build_variables() {
+    virtual void build_variables() {
         // X variables: vertices x K
         var_offsets_.push_back(make_pair(0, "X"));
         for( int v = 0; v < apta_.num_vertices(); ++v ) {
@@ -216,11 +111,53 @@ class Theory {
         }
         cout << "Y: #variables=" << variables_.size() - var_offsets_.back().first << " (LK^2), offset=" << var_offsets_.back().first << endl;
     }
-    void build_literals() {
-        for( size_t i = 0; i < variables_.size(); ++i )
-            literals_.push_back(new SAT::Literal(*variables_[i], false));
-        for( size_t i = 0; i < variables_.size(); ++i )
-            literals_.push_back(new SAT::Literal(*variables_[i], true));
+
+    virtual void build_base() {
+        imp_offsets_.push_back(make_pair(0, "X"));
+        add_comment("Theory for formulas X(v,i)");
+        build_formulas_X();
+        cout << "X: #implications=" << implications_.size() - imp_offsets_.back().first << " (V + V * (K-1) * K / 2 + ?)" << endl;
+        //print_implications(cout, imp_offsets_.back().first, implications_.size());
+
+        imp_offsets_.push_back(make_pair(implications_.size(), "Y"));
+        add_comment("Theory for formulas Y(a,i,j)");
+        build_formulas_Y();
+        cout << "Y: #implications=" << implications_.size() - imp_offsets_.back().first << " (L * K^2 * (K-1) / 2 + L * K)" << endl;
+        //print_implications(cout, imp_offsets_.back().first, implications_.size());
+
+        imp_offsets_.push_back(make_pair(implications_.size(), "XZ"));
+        add_comment("Theory for formulas X(v,i) and Z(i)");
+        build_formulas_XZ();
+        cout << "XZ: #implications=" << implications_.size() - imp_offsets_.back().first << " (K * (V_accept + V_reject))" << endl;
+        //print_implications(cout, imp_offsets_.back().first, implications_.size());
+
+        imp_offsets_.push_back(make_pair(implications_.size(), "XY"));
+        add_comment("Theory for formulas X(v,i) and Y(a,i,j)");
+        build_formulas_XY();
+        cout << "XY: #implications=" << implications_.size() - imp_offsets_.back().first << " (2 * (V-1) * K^2)" << endl;
+        //print_implications(cout, imp_offsets_.back().first, implications_.size());
+    }
+
+    virtual void build_rest() {
+        if( options_.redundant_graph_edges_ || options_.break_symmetries_using_graph_clique_ ) {
+            Graph::Undirected g;
+            cout << "----------- constructing undirected graph -----------" << endl;
+            cout << "apta: #accept=" << apta_.accept().size() << ", #reject=" << apta_.reject().size() << endl;
+            apta_.build_induced_undirected_graph(g);
+            //cout << "graph" << endl;
+            //g.dump(cout);
+            cout << "undirected graph: #vertices=" << g.num_vertices() << ", #edges=" << g.num_edges() << std::endl;
+
+            if( options_.redundant_graph_edges_ ) {
+                cout << "---- add redundant implications from graph edges ----" << endl;
+                add_implications_from_graph_edges(g);
+            }
+
+            if( options_.break_symmetries_using_graph_clique_ ) {
+                cout << "------------- add clauses from clique ---------------" << endl;
+                break_symmetries_using_graph_clique(g);
+            }
+        }
     }
 
     // references to variables
@@ -353,32 +290,6 @@ class Theory {
         }
     }
 
-    void build_base() {
-        imp_offsets_.push_back(make_pair(0, "X"));
-        add_comment("Theory for formulas X(v,i)");
-        build_formulas_X();
-        cout << "X: #implications=" << implications_.size() - imp_offsets_.back().first << " (V + V * (K-1) * K / 2 + ?)" << endl;
-        //print_implications(cout, imp_offsets_.back().first, implications_.size());
-
-        imp_offsets_.push_back(make_pair(implications_.size(), "Y"));
-        add_comment("Theory for formulas Y(a,i,j)");
-        build_formulas_Y();
-        cout << "Y: #implications=" << implications_.size() - imp_offsets_.back().first << " (L * K^2 * (K-1) / 2 + L * K)" << endl;
-        //print_implications(cout, imp_offsets_.back().first, implications_.size());
-
-        imp_offsets_.push_back(make_pair(implications_.size(), "XZ"));
-        add_comment("Theory for formulas X(v,i) and Z(i)");
-        build_formulas_XZ();
-        cout << "XZ: #implications=" << implications_.size() - imp_offsets_.back().first << " (K * (V_accept + V_reject))" << endl;
-        //print_implications(cout, imp_offsets_.back().first, implications_.size());
-
-        imp_offsets_.push_back(make_pair(implications_.size(), "XY"));
-        add_comment("Theory for formulas X(v,i) and Y(a,i,j)");
-        build_formulas_XY();
-        cout << "XY: #implications=" << implications_.size() - imp_offsets_.back().first << " (2 * (V-1) * K^2)" << endl;
-        //print_implications(cout, imp_offsets_.back().first, implications_.size());
-    }
-
     void add_implications_from_graph_edges(const Graph::Undirected &g) {
         imp_offsets_.push_back(make_pair(implications_.size(), "edges"));
         add_comment(string("Redundant clauses from graph edges: #vertices=") + to_string(g.num_vertices()) + " #edges=" + to_string(g.num_edges() >> 1));
@@ -434,81 +345,20 @@ class Theory {
         cout << "#implications=" << implications_.size() - imp_offsets_.back().first << endl;
     }
 
-    // readers
-    void read_minisat_output(ifstream &is) const {
-        string status;
-        is >> status;
-        satisfiable_ = status == "SAT";
-        if( satisfiable_ ) {
-            int var, lit;
-            model_ = vector<bool>(variables_.size(), false);
-            for( size_t i = 0; i < variables_.size(); ++i ) {
-                is >> lit;
-                var = lit > 0 ? lit - 1 : -lit - 1;
-                assert(var == int(i));
-                model_[var] = lit > 0;
-            }
-            is >> lit;
-            assert(lit == 0);
-        } else {
-            model_.clear();
-        }
+  public:
+    Theory(const DFA::Sample &S, int K, const DFA::APTA<string> &apta, const Options &options)
+      : SAT::Theory(options.decode_),
+        S_(S), K_(K), apta_(apta), options_(options) {
+        cout << "Theory:"
+             << " parameters:" << " K=" << K_
+             << ", #labels=" << apta_.num_labels()
+             << ", #vertices=" << apta_.num_vertices()
+             << ", #V_accept=" << apta_.accept().size()
+             << ", #V_reject=" << apta_.reject().size()
+             << endl;
+        build_theory();
     }
-
-    // output
-    void dump(ostream &os) const {
-        os << "p cnf " << variables_.size() << " " << implications_.size() << endl;
-        size_t i = 0;
-        for( size_t j = 0; j < implications_.size(); ++j ) {
-            while( (i < comments_.size()) && (comments_[i].first == j) ) {
-                os << "c " << comments_[i].second << endl;
-                ++i;
-            }
-            implications_[j]->dump(os);
-        }
-        while( i < comments_.size() ) {
-            os << "c " << comments_[i].second << endl;
-            ++i;
-        }
-    }
-    void print(ostream &os) const {
-        size_t i = 0;
-        for( size_t j = 0; j < implications_.size(); ++j ) {
-            while( (i < comments_.size()) && (comments_[i].first == j) ) {
-                os << "% " << comments_[i].second << endl;
-                ++i;
-            }
-            implications_[j]->print(os, literals_);
-            os << endl;
-        }
-        while( i < comments_.size() ) {
-            os << "% " << comments_[i].second << endl;
-            ++i;
-        }
-    }
-    void print_implications(ostream &os, int start, int end) const {
-        while( start < end ) {
-            implications_[start++]->print(os, literals_);
-            os << endl;
-        }
-    }
-
-    void dump_model(ostream &os) const {
-        for( size_t var = 0; var < variables_.size(); ++var ) {
-            os << variables_[var] << " ";
-        }
-        os << "0" << endl;
-    }
-    void print_model(ostream &os) const {
-        for( size_t var = 0; var < model_.size(); ++var ) {
-            bool sign = model_[var];
-            if( sign ) {
-                assert(var < variables_.size());
-                variables_[var]->print(os);
-                os << endl;
-            }
-        }
-    }
+    virtual ~Theory() { }
 
     // print abstraction coded in model
     void decode_model(DFA::DFA<string> &dfa) const {

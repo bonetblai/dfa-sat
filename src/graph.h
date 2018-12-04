@@ -17,7 +17,8 @@ class Undirected {
 
   public:
     Undirected(int num_vertices = 0)
-      : num_vertices_(num_vertices) {
+      : num_vertices_(num_vertices),
+        num_edges_(0) {
         edges_ = std::vector<std::vector<int> >(num_vertices_);
     }
     virtual ~Undirected() = default;
@@ -51,6 +52,7 @@ class Undirected {
 
     int add_edge(int src, int dst) {
         assert((0 <= src) && (src < num_vertices_));
+        assert((0 <= dst) && (dst < num_vertices_));
         edges_[src].push_back(dst);
         edges_[dst].push_back(src);
         num_edges_ += 2;
