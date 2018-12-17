@@ -105,6 +105,46 @@ class Theory {
             literals_.push_back(new SAT::Literal(*variables_[i], true));
     }
 
+    // support for at-most-k pseudo boolean constraints
+    void build_variables_for_at_most_k(const std::vector<int> &variables, int k) {
+        if( k > 2 ) {
+            std::cout << "error: unsupported formulas for at-most-k for k > 2: k=" << k << std::endl;
+            exit(0);
+        }
+    }
+
+    void build_formulas_for_at_most_k(const std::vector<int> &variables, int k) {
+        // provisional, direct encoding
+        if( k == 1 ) {
+            for( size_t i = 0; i < variables.size(); ++i ) {
+                assert((0 <= variables[i]) && (variables[i] < num_variables()));
+                for( size_t j = 1 + i; j < variables.size(); ++j ) {
+                    SAT::Implication *IP = new SAT::Implication;
+                    IP->add_consequent(-(1 + variables[i]));
+                    IP->add_consequent(-(1 + variables[j]));
+                    add_implication(IP);
+                }
+            }
+        } else if( k == 2 ) {
+            for( size_t i = 0; i < variables.size(); ++i ) {
+                assert((0 <= variables[i]) && (variables[i] < num_variables()));
+                for( size_t j = 1 + i; j < variables.size(); ++j ) {
+                    for( size_t l = 0; l < variables.size(); ++l ) {
+                        if( (l == i) || (l == j) ) continue;
+                        SAT::Implication *IP = new SAT::Implication;
+                        IP->add_antecedent(1 + variables[i]);
+                        IP->add_antecedent(1 + variables[j]);
+                        IP->add_consequent(-(1 + variables[l]));
+                        add_implication(IP);
+                    }
+                }
+            }
+        } else {
+            std::cout << "error: unsupported formulas for at-most-k for k > 2: k=" << k << std::endl;
+            exit(0);
+        }
+    }
+
     // readers
     void read_minisat_output(std::ifstream &is) const {
         std::string status;
