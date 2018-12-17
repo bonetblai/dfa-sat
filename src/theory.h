@@ -109,14 +109,25 @@ class Theory {
     }
 
     // support for at-most-k pseudo boolean constraints
-    void build_variables_for_at_most_k(const std::vector<int> &variables, int k) {
+    void build_variables_for_at_most_k(const std::string &prefix, const std::vector<int> &variables, int k) {
+        assert((0 <= k) && (k <= variables.size()));
         if( k > 2 ) {
             std::cout << "error: unsupported formulas for at-most-k for k > 2: k=" << k << std::endl;
             exit(0);
         }
     }
+    void build_variables_for_at_least_k(const std::string &prefix, const std::vector<int> &variables, int k) {
+        assert((0 <= k) && (k <= variables.size()));
+        build_variables_for_at_most_k(prefix, variables, int(variables.size()) - k);
+    }
+    void build_variables_for_equal_to_k(const std::string &prefix, const std::vector<int> &variables, int k) {
+        assert((0 <= k) && (k <= variables.size()));
+        build_variables_for_at_least_k(prefix, variables, k);
+        build_variables_for_at_most_k(prefix, variables, k);
+    }
 
-    void build_formulas_for_at_most_k(const std::vector<int> &variables, int k) {
+    void build_formulas_for_at_most_k(const std::string &prefix, const std::vector<int> &variables, int k) {
+        assert((0 <= k) && (k <= variables.size()));
         // provisional, direct encoding
         if( k == 1 ) {
             for( size_t i = 0; i < variables.size(); ++i ) {
@@ -146,6 +157,15 @@ class Theory {
             std::cout << "error: unsupported formulas for at-most-k for k > 2: k=" << k << std::endl;
             exit(0);
         }
+    }
+    void build_formulas_for_at_least_k(const std::string &prefix, const std::vector<int> &variables, int k) {
+        assert((0 <= k) && (k <= variables.size()));
+        build_formulas_for_at_least_k(prefix, variables, int(variables.size()) - k);
+    }
+    void build_formulas_for_equal_to_k(const std::string &prefix, const std::vector<int> &variables, int k) {
+        assert((0 <= k) && (k <= variables.size()));
+        build_formulas_for_at_least_k(prefix, variables, k);
+        build_formulas_for_at_most_k(prefix, variables, k);
     }
 
     // readers
