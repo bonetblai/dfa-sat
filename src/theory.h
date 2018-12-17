@@ -51,6 +51,9 @@ class Theory {
         clear_variables();
     }
 
+    // unimplemented virtual function to decode model
+    virtual void decode_model(std::ostream &os) const = 0;
+
     const SAT::Var& variable(int index) const {
         assert((0 <= index) && (index < variables_.size()));
         return *variables_[index];

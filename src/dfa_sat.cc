@@ -409,6 +409,11 @@ class Theory : public SAT::Theory {
         // simplify
         dfa.remove_redundant_non_accepting_states();
     }
+    virtual void decode_model(ostream &os) const {
+        DFA::DFA<string> dfa(K_);
+        decode_model(dfa);
+        dfa.dump(os);
+    }
 };
 
 const DFA::Sample* read_data(const string &sample_filename) {
