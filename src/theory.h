@@ -4,6 +4,7 @@
 #include <bitset>
 #include <cassert>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -16,15 +17,18 @@ class Theory {
     const bool decode_;
 
     std::vector<std::pair<int, std::string> > var_offsets_;
-    std::vector<const SAT::Var*> variables_;
-    std::vector<const SAT::Literal*> literals_;
+    std::vector<const Var*> variables_;
+    std::vector<const Literal*> literals_;
 
     std::vector<std::pair<int, const std::string> > comments_;
-    std::vector<const SAT::Implication*> implications_;
+    std::vector<const Implication*> implications_;
     std::vector<std::pair<int, std::string> > imp_offsets_;
 
     mutable bool satisfiable_;
     mutable std::vector<bool> model_;
+
+    std::set<std::string> at_most_k_constraints_;
+    std::set<std::string> at_least_k_constraints_;
 
     virtual void build_variables() = 0;
     virtual void build_base() = 0;
@@ -54,11 +58,11 @@ class Theory {
     // unimplemented virtual function to decode model
     virtual void decode_model(std::ostream &os) const = 0;
 
-    const SAT::Var& variable(int index) const {
+    const Var& variable(int index) const {
         assert((0 <= index) && (index < variables_.size()));
         return *variables_[index];
     }
-    const SAT::Literal& literal(int index) const {
+    const Literal& literal(int index) const {
         assert(index != 0);
         assert((-int(literals_.size()) <= index) && (index <= int(literals_.size())));
         return index > 0 ? *literals_[index - 1] : *literals_[variables_.size() + -index - 1];
@@ -83,7 +87,7 @@ class Theory {
             delete implications_[i];
         implications_.clear();
     }
-    void add_implication(const SAT::Implication *IP) {
+    void add_implication(const Implication *IP) {
         implications_.push_back(IP);
     }
     int num_implications() const {
@@ -103,9 +107,9 @@ class Theory {
 
     void build_literals() {
         for( size_t i = 0; i < variables_.size(); ++i )
-            literals_.push_back(new SAT::Literal(*variables_[i], false));
+            literals_.push_back(new Literal(*variables_[i], false));
         for( size_t i = 0; i < variables_.size(); ++i )
-            literals_.push_back(new SAT::Literal(*variables_[i], true));
+            literals_.push_back(new Literal(*variables_[i], true));
     }
 
     // support for at-most-k pseudo boolean constraints
@@ -118,7 +122,10 @@ class Theory {
     }
     void build_variables_for_at_least_k(const std::string &prefix, const std::vector<int> &variables, int k) {
         assert((0 <= k) && (k <= variables.size()));
-        build_variables_for_at_most_k(prefix, variables, int(variables.size()) - k);
+        if( k > 1 ) {
+            std::cout << "error: unsupported formulas for at-least-k for k > 1: k=" << k << std::endl;
+            exit(0);
+        }
     }
     void build_variables_for_equal_to_k(const std::string &prefix, const std::vector<int> &variables, int k) {
         assert((0 <= k) && (k <= variables.size()));
@@ -128,12 +135,22 @@ class Theory {
 
     void build_formulas_for_at_most_k(const std::string &prefix, const std::vector<int> &variables, int k) {
         assert((0 <= k) && (k <= variables.size()));
+
+        // check we have not already issued these constraints
+        if( (prefix != "") && (at_most_k_constraints_.find(prefix) != at_most_k_constraints_.end()) ) {
+            std::cout << "error: at-most-k constraints for '" << prefix << "' already emited!" << std::endl;
+            exit(0);
+        }
+
+        // generate required variables
+        build_variables_for_at_most_k(prefix, variables, k);
+
         // provisional, direct encoding
         if( k == 1 ) {
             for( size_t i = 0; i < variables.size(); ++i ) {
                 assert((0 <= variables[i]) && (variables[i] < num_variables()));
                 for( size_t j = 1 + i; j < variables.size(); ++j ) {
-                    SAT::Implication *IP = new SAT::Implication;
+                    Implication *IP = new Implication;
                     IP->add_consequent(-(1 + variables[i]));
                     IP->add_consequent(-(1 + variables[j]));
                     add_implication(IP);
@@ -145,7 +162,7 @@ class Theory {
                 for( size_t j = 1 + i; j < variables.size(); ++j ) {
                     for( size_t l = 0; l < variables.size(); ++l ) {
                         if( (l == i) || (l == j) ) continue;
-                        SAT::Implication *IP = new SAT::Implication;
+                        Implication *IP = new Implication;
                         IP->add_antecedent(1 + variables[i]);
                         IP->add_antecedent(1 + variables[j]);
                         IP->add_consequent(-(1 + variables[l]));
@@ -160,7 +177,26 @@ class Theory {
     }
     void build_formulas_for_at_least_k(const std::string &prefix, const std::vector<int> &variables, int k) {
         assert((0 <= k) && (k <= variables.size()));
-        build_formulas_for_at_least_k(prefix, variables, int(variables.size()) - k);
+
+        // check we have not already issued these constraints
+        if( (prefix != "") && (at_least_k_constraints_.find(prefix) != at_least_k_constraints_.end()) ) {
+            std::cout << "error: at-least-k constraints for '" << prefix << "' already emited!" << std::endl;
+            exit(0);
+        }
+
+        // generate required variables
+        build_variables_for_at_least_k(prefix, variables, k);
+
+        // provisional, direct encoding
+        if( k == 1 ) {
+            Implication *IP = new Implication;
+            for( size_t i = 0; i < variables.size(); ++i )
+                IP->add_consequent(1 + variables[i]);
+            add_implication(IP);
+        } else {
+            std::cout << "error: unsupported formulas for at-least-k for k > 1: k=" << k << std::endl;
+            exit(0);
+        }
     }
     void build_formulas_for_equal_to_k(const std::string &prefix, const std::vector<int> &variables, int k) {
         assert((0 <= k) && (k <= variables.size()));
