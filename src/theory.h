@@ -18,7 +18,8 @@ class Theory {
 
     std::vector<std::pair<int, std::string> > var_offsets_;
     std::vector<const Var*> variables_;
-    std::vector<const Literal*> literals_;
+    std::vector<const Literal*> pos_literals_;
+    std::vector<const Literal*> neg_literals_;
 
     std::vector<std::pair<int, const std::string> > comments_;
     std::vector<const Implication*> implications_;
@@ -29,6 +30,7 @@ class Theory {
 
     std::set<std::string> at_most_k_constraints_;
     std::set<std::string> at_least_k_constraints_;
+    std::set<std::string> equal_k_constraints_;
 
     virtual void build_variables() = 0;
     virtual void build_base() = 0;
@@ -38,12 +40,9 @@ class Theory {
         std::cout << "---------------- variables + literals ---------------" << std::endl;
         build_variables();
         build_literals();
-
-        if( !decode_ ) {
-            std::cout << "----------------- base implications -----------------" << std::endl;
-            build_base();
-            build_rest();
-        }
+        std::cout << "----------------- base implications -----------------" << std::endl;
+        build_base();
+        build_rest();
         std::cout << "-----------------------------------------------------" << std::endl;
     }
 
@@ -64,8 +63,8 @@ class Theory {
     }
     const Literal& literal(int index) const {
         assert(index != 0);
-        assert((-int(literals_.size()) <= index) && (index <= int(literals_.size())));
-        return index > 0 ? *literals_[index - 1] : *literals_[variables_.size() + -index - 1];
+        assert((-int(variables_.size()) <= index) && (index <= int(variables_.size())));
+        return index > 0 ? *pos_literals_[index - 1] : *neg_literals_[-index - 1];
     }
 
     void clear_variables() {
@@ -74,9 +73,12 @@ class Theory {
         variables_.clear();
     }
     void clear_literals() {
-        for( size_t i = 0; i < literals_.size(); ++i )
-            delete literals_[i];
-        literals_.clear();
+        for( size_t i = 0; i < pos_literals_.size(); ++i )
+            delete pos_literals_[i];
+        pos_literals_.clear();
+        for( size_t i = 0; i < neg_literals_.size(); ++i )
+            delete neg_literals_[i];
+        neg_literals_.clear();
     }
     int num_variables() const {
         return variables_.size();
@@ -105,46 +107,147 @@ class Theory {
         return model_;
     }
 
+    int new_variable(const std::string &name) {
+        int index = variables_.size();
+        variables_.push_back(new Var(index, name));
+        return index;
+    }
+    void build_literal(int index) {
+        assert(pos_literals_.size() == neg_literals_.size());
+        assert((0 <= index) && (index < int(variables_.size())) && (index >= int(pos_literals_.size())));
+        pos_literals_.push_back(new Literal(*variables_[index], false));
+        neg_literals_.push_back(new Literal(*variables_[index], true));
+    }
     void build_literals() {
         for( size_t i = 0; i < variables_.size(); ++i )
-            literals_.push_back(new Literal(*variables_[i], false));
-        for( size_t i = 0; i < variables_.size(); ++i )
-            literals_.push_back(new Literal(*variables_[i], true));
+            build_literal(i);
     }
 
-    // support for at-most-k pseudo boolean constraints
-    void build_variables_for_at_most_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((0 <= k) && (k <= variables.size()));
-        if( k > 2 ) {
-            std::cout << "error: unsupported formulas for at-most-k for k > 2: k=" << k << std::endl;
-            exit(0);
+    // support for pseudo boolean constraints
+    void build_2_comparator(const std::string &prefix, int x1, int y1, std::vector<int> &z) { // z1 = max(x1,y1), z2 = min(x1,y1)
+        // create new vars z1 and z2
+        int z1 = new_variable(prefix + "_z1");
+        int z2 = new_variable(prefix + "_z2");
+        z.push_back(z1);
+        z.push_back(z2);
+
+        // top three clauses (required for at-least and equal)
+        // x1 <= z2, y1 <= z2, x1 v y1 <= z1
+        Implication *IP1 = new Implication;
+        IP1->add_antecedent(1 + z2);
+        IP1->add_consequent(1 + x1);
+        add_implication(IP1);
+
+        Implication *IP2 = new Implication;
+        IP2->add_antecedent(1 + z2);
+        IP2->add_consequent(1 + y1);
+        add_implication(IP2);
+
+        Implication *IP3 = new Implication;
+        IP3->add_antecedent(1 + z1);
+        IP3->add_consequent(1 + x1);
+        IP3->add_consequent(1 + y1);
+        add_implication(IP3);
+
+        // bottom three clauses (required for at-most and equal)
+        // x1 => z1, y1 => z1, x1 & y1 => z2
+        Implication *IP4 = new Implication;
+        IP4->add_antecedent(1 + x1);
+        IP4->add_consequent(1 + z1);
+        add_implication(IP4);
+
+        Implication *IP5 = new Implication;
+        IP5->add_antecedent(1 + y1);
+        IP5->add_consequent(1 + z1);
+        add_implication(IP5);
+
+        Implication *IP6 = new Implication;
+        IP6->add_antecedent(1 + x1);
+        IP6->add_antecedent(1 + y1);
+        IP6->add_consequent(1 + z2);
+        add_implication(IP6);
+    }
+    void build_merge_network(const std::string &prefix, int n, const std::vector<int> &x, const std::vector<int> &y, std::vector<int> &z) {
+        assert((n == 1) || (n % 2 == 0));
+        assert((x.size() == n) && (y.size() == n));
+        if( n == 1 ) {
+            build_2_comparator(prefix + "_base", x[0], y[0], z);
+        } else {
+            int m = n >> 1;
+            std::vector<int> x1(m), y1(m), z1;
+            std::vector<int> x2(m), y2(m), z2;
+            for( int i = 0; i < m; ++i ) {
+                x1[i] = x[2*i];
+                y1[i] = y[2*i];
+                x2[i] = x[2*i+1];
+                y2[i] = y[2*i+1];
+            }
+
+            build_merge_network(prefix + "_rec" + std::to_string(m), m, x1, y1, z1);
+            assert(z1.size() == n);
+            build_merge_network(prefix + "_rec" + std::to_string(m), m, x2, y2, z2);
+            assert(z2.size() == n);
+
+            z.push_back(z1[0]);
+            for( int i = 0; i < n - 1; ++i )
+                build_2_comparator(prefix + "_final_" + std::to_string(i) + "of" + std::to_string(n - 1), z2[i], z1[1 + i], z);
+            z.push_back(z2.back());
         }
     }
-    void build_variables_for_at_least_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((0 <= k) && (k <= variables.size()));
-        if( k > 1 ) {
-            std::cout << "error: unsupported formulas for at-least-k for k > 1: k=" << k << std::endl;
-            exit(0);
+    void build_sorting_network(const std::string &prefix, int n, const std::vector<int> &x, std::vector<int> &z) {
+        assert((n > 0) && (n % 2 == 0));
+        assert(x.size() == n);
+        if( n == 2 ) {
+            build_2_comparator(prefix + "_base", x[0], x[1], z);
+        } else {
+            int m = n >> 1;
+            std::vector<int> x1(&x[0], &x[m]), z1;
+            assert(x1.size() == m);
+            build_sorting_network(prefix + "_rec" + std::to_string(m), m, x1, z1);
+            std::vector<int> x2(&x[m], &x[n]), z2;
+            assert(x2.size() == m);
+            build_sorting_network(prefix + "_rec" + std::to_string(m), m, x2, z2);
+            build_merge_network(prefix + "_merge" + std::to_string(m), m, z1, z2, z);
         }
     }
-    void build_variables_for_equal_to_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((0 <= k) && (k <= variables.size()));
-        build_variables_for_at_least_k(prefix, variables, k);
-        build_variables_for_at_most_k(prefix, variables, k);
+    void pad_and_build_sorting_network(const std::string &prefix, const std::vector<int> &variables, std::vector<int> &z) {
+        assert(!variables.empty());
+        int n = 1;
+        while( n < int(variables.size()) )
+            n = n << 1;
+
+        std::vector<int> x(variables);
+        while( int(x.size()) < n ) {
+            // pad one var
+            assert(0);
+        }
+        assert(x.size() == n);
+
+        // build sorting network
+        build_sorting_network(prefix + "_sort" + std::to_string(n), n, x, z);
     }
 
     void build_formulas_for_at_most_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((0 <= k) && (k <= variables.size()));
+        assert((0 <= k) && (k <= int(variables.size())));
 
-        // check we have not already issued these constraints
+        // trivial cases
+        if( k == 0 ) {
+            for( int i = 0; i < int(variables.size()); ++i ) {
+                Implication *IP = new Implication;
+                IP->add_consequent(-(1 + variables[i]));
+                add_implication(IP);
+            }
+        } else if ( k == int(variables.size()) ) {
+            return;
+        }
+
+        // check that we have not already issued these constraints
         if( (prefix != "") && (at_most_k_constraints_.find(prefix) != at_most_k_constraints_.end()) ) {
             std::cout << "error: at-most-k constraints for '" << prefix << "' already emited!" << std::endl;
             exit(0);
         }
 
-        // generate required variables
-        build_variables_for_at_most_k(prefix, variables, k);
-
+#if 0
         // provisional, direct encoding
         if( k == 1 ) {
             for( size_t i = 0; i < variables.size(); ++i ) {
@@ -170,38 +273,57 @@ class Theory {
                     }
                 }
             }
-        } else {
-            std::cout << "error: unsupported formulas for at-most-k for k > 2: k=" << k << std::endl;
-            exit(0);
         }
+#endif
+
+        std::vector<int> z;
+        pad_and_build_sorting_network(prefix, variables, z);
+        Implication *IP = new Implication;
+        IP->add_consequent(-(1 + z[k]));
+        add_implication(IP);
     }
     void build_formulas_for_at_least_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((0 <= k) && (k <= variables.size()));
+        assert((k > 0) && (k < int(variables.size())));
 
-        // check we have not already issued these constraints
+        // check that we have not already issued these constraints
         if( (prefix != "") && (at_least_k_constraints_.find(prefix) != at_least_k_constraints_.end()) ) {
             std::cout << "error: at-least-k constraints for '" << prefix << "' already emited!" << std::endl;
             exit(0);
         }
 
-        // generate required variables
-        build_variables_for_at_least_k(prefix, variables, k);
-
+#if 0
         // provisional, direct encoding
         if( k == 1 ) {
             Implication *IP = new Implication;
             for( size_t i = 0; i < variables.size(); ++i )
                 IP->add_consequent(1 + variables[i]);
             add_implication(IP);
-        } else {
-            std::cout << "error: unsupported formulas for at-least-k for k > 1: k=" << k << std::endl;
-            exit(0);
         }
+#endif
+
+        std::vector<int> z;
+        pad_and_build_sorting_network(prefix, variables, z);
+        Implication *IP = new Implication;
+        IP->add_consequent(1 + z[k - 1]);
+        add_implication(IP);
     }
     void build_formulas_for_equal_to_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((0 <= k) && (k <= variables.size()));
-        build_formulas_for_at_least_k(prefix, variables, k);
-        build_formulas_for_at_most_k(prefix, variables, k);
+        assert((k > 0) && (k < int(variables.size())));
+
+        // check that we have not already issued these constraints
+        if( (prefix != "") && (equal_k_constraints_.find(prefix) != equal_k_constraints_.end()) ) {
+            std::cout << "error: equal-k constraints for '" << prefix << "' already emited!" << std::endl;
+            exit(0);
+        }
+
+        std::vector<int> z;
+        pad_and_build_sorting_network(prefix, variables, z);
+        Implication *IP1 = new Implication;
+        IP1->add_consequent(-(1 + z[k]));
+        add_implication(IP1);
+        Implication *IP2 = new Implication;
+        IP2->add_consequent(1 + z[k - 1]);
+        add_implication(IP2);
     }
 
     // readers
@@ -251,7 +373,7 @@ class Theory {
                 os << "% " << comments_[i].second << std::endl;
                 ++i;
             }
-            implications_[j]->print(os, literals_);
+            implications_[j]->print(os, pos_literals_, neg_literals_);
             os << std::endl;
         }
         while( i < comments_.size() ) {
@@ -261,7 +383,7 @@ class Theory {
     }
     void print_implications(std::ostream &os, int start, int end) const {
         while( start < end ) {
-            implications_[start++]->print(os, literals_);
+            implications_[start++]->print(os, pos_literals_, neg_literals_);
             os << std::endl;
         }
     }

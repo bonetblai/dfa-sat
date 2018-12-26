@@ -83,16 +83,20 @@ class Implication {
         }
         os << " 0" << std::endl;
     }
-    void print(std::ostream &os, const std::vector<const Literal*> &literals) const {
+    void print(std::ostream &os, const std::vector<const Literal*> &pos_literals, const std::vector<const Literal*> &neg_literals) const {
         for( size_t i = 0; i < antecedent_.size(); ++i ) {
-            int index = (antecedent_[i] > 0 ? antecedent_[i] : (literals.size() >> 1) + -antecedent_[i]) - 1;
-            literals[index]->print(os);
+            if( antecedent_[i] > 0 )
+                pos_literals[antecedent_[i] - 1]->print(os);
+            else
+                neg_literals[-antecedent_[i] - 1]->print(os);
             if( i + 1 < antecedent_.size() ) os << " & ";
         }
         os << " => ";
         for( size_t i = 0; i < consequent_.size(); ++i ) {
-            int index = (consequent_[i] > 0 ? consequent_[i] : (literals.size() >> 1) + -consequent_[i]) - 1;
-            literals[index]->print(os);
+            if( consequent_[i] > 0 )
+                pos_literals[consequent_[i] - 1]->print(os);
+            else
+                neg_literals[-consequent_[i] - 1]->print(os);
             if( i + 1 < consequent_.size() ) os << " v ";
         }
         os << std::flush;
