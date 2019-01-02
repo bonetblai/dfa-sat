@@ -1,9 +1,9 @@
 #ifndef SAT_THEORY_H
 #define SAT_THEORY_H
 
-#include <bitset>
 #include <cassert>
 #include <iostream>
+#include <fstream>
 #include <set>
 #include <string>
 #include <vector>
@@ -107,11 +107,6 @@ class Theory {
         return model_;
     }
 
-    int new_variable(const std::string &name) {
-        int index = variables_.size();
-        variables_.push_back(new Var(index, name));
-        return index;
-    }
     void build_literal(int index) {
         assert(pos_literals_.size() == neg_literals_.size());
         assert((0 <= index) && (index < int(variables_.size())) && (index >= int(pos_literals_.size())));
@@ -122,12 +117,22 @@ class Theory {
         for( size_t i = 0; i < variables_.size(); ++i )
             build_literal(i);
     }
+    int new_variable(const std::string &name) {
+        int index = variables_.size();
+        variables_.push_back(new Var(index, name));
+        return index;
+    }
+    int new_literal(const std::string &name) {
+        int index = new_variable(name);
+        build_literal(index);
+        return index;
+    }
 
     // support for pseudo boolean constraints
     void build_2_comparator(const std::string &prefix, int x1, int y1, std::vector<int> &z) { // z1 = max(x1,y1), z2 = min(x1,y1)
         // create new vars z1 and z2
-        int z1 = new_variable(prefix + "_z1");
-        int z2 = new_variable(prefix + "_z2");
+        int z1 = new_literal(prefix + "_z1");
+        int z2 = new_literal(prefix + "_z2");
         z.push_back(z1);
         z.push_back(z2);
 
@@ -219,7 +224,11 @@ class Theory {
         std::vector<int> x(variables);
         while( int(x.size()) < n ) {
             // pad one var
-            assert(0);
+            int index = new_literal(prefix + "_pad_var" + std::to_string(x.size()));
+            Implication *IP = new Implication;
+            IP->add_consequent(-(1 + index));
+            add_implication(IP);
+            x.push_back(index);
         }
         assert(x.size() == n);
 
