@@ -237,8 +237,6 @@ class Theory {
     }
 
     void build_formulas_for_at_most_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((0 <= k) && (k <= int(variables.size())));
-
         // trivial cases
         if( k == 0 ) {
             for( int i = 0; i < int(variables.size()); ++i ) {
@@ -246,7 +244,8 @@ class Theory {
                 IP->add_consequent(-(1 + variables[i]));
                 add_implication(IP);
             }
-        } else if ( k == int(variables.size()) ) {
+            return;
+        } else if ( k >= int(variables.size()) ) {
             return;
         }
 
@@ -285,14 +284,28 @@ class Theory {
         }
 #endif
 
+        // issue constraints, handling special cases
         std::vector<int> z;
         pad_and_build_sorting_network(prefix, variables, z);
+
         Implication *IP = new Implication;
         IP->add_consequent(-(1 + z[k]));
         add_implication(IP);
     }
     void build_formulas_for_at_least_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((k > 0) && (k < int(variables.size())));
+        assert((0 <= k) && (k <= int(variables.size())));
+
+        // trivial cases
+        if( k == 0 ) {
+            return;
+        } else if( k == int(variables.size()) ) {
+            for( int i = 0; i < int(variables.size()); ++i ) {
+                Implication *IP = new Implication;
+                IP->add_consequent(1 + variables[i]);
+                add_implication(IP);
+            }
+            return;
+        }
 
         // check that we have not already issued these constraints
         if( (prefix != "") && (at_least_k_constraints_.find(prefix) != at_least_k_constraints_.end()) ) {
@@ -300,24 +313,34 @@ class Theory {
             exit(0);
         }
 
-#if 0
-        // provisional, direct encoding
+        // issue constraints, handling special cases
         if( k == 1 ) {
             Implication *IP = new Implication;
             for( size_t i = 0; i < variables.size(); ++i )
                 IP->add_consequent(1 + variables[i]);
             add_implication(IP);
-        }
-#endif
+            return;
+        } else {
+            std::vector<int> z;
+            pad_and_build_sorting_network(prefix, variables, z);
 
-        std::vector<int> z;
-        pad_and_build_sorting_network(prefix, variables, z);
-        Implication *IP = new Implication;
-        IP->add_consequent(1 + z[k - 1]);
-        add_implication(IP);
+            Implication *IP = new Implication;
+            IP->add_consequent(1 + z[k - 1]);
+            add_implication(IP);
+        }
     }
     void build_formulas_for_equal_to_k(const std::string &prefix, const std::vector<int> &variables, int k) {
-        assert((k > 0) && (k < int(variables.size())));
+        assert((0 <= k) && (k <= int(variables.size())));
+
+        // trivial cases
+        if( k == int(variables.size()) ) {
+            for( int i = 0; i < int(variables.size()); ++i ) {
+                Implication *IP = new Implication;
+                IP->add_consequent(1 + variables[i]);
+                add_implication(IP);
+            }
+            return;
+        }
 
         // check that we have not already issued these constraints
         if( (prefix != "") && (equal_k_constraints_.find(prefix) != equal_k_constraints_.end()) ) {
@@ -327,9 +350,11 @@ class Theory {
 
         std::vector<int> z;
         pad_and_build_sorting_network(prefix, variables, z);
+
         Implication *IP1 = new Implication;
         IP1->add_consequent(-(1 + z[k]));
         add_implication(IP1);
+
         Implication *IP2 = new Implication;
         IP2->add_consequent(1 + z[k - 1]);
         add_implication(IP2);

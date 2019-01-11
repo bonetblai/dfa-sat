@@ -243,7 +243,9 @@ template<typename T> class DFA {
         // add states and set initial state
         for( int i = 0; i < num_states; ++i )
             add_state();
-        set_initial_state(initial_state);
+
+        if( initial_state >= 0 )
+            set_initial_state(initial_state);
 
         // read labels
         int num_labels;
