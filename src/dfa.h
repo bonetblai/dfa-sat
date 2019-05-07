@@ -70,6 +70,10 @@ template<typename T> class DFA {
         assert((0 <= index) && (index < num_labels_));
         return labels_[index];
     }
+    const std::vector<T>& labels() const {
+        return labels_;
+    }
+
     int edge(int src, int label_index) const {
         assert((0 <= src) && (src < num_states_));
         for( size_t i = 0; i < edges_[src].size(); ++i ) {
