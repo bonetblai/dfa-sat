@@ -127,6 +127,17 @@ class Theory {
         build_literal(index);
         return index;
     }
+    void push_new_vartype(const std::string &name) {
+        var_offsets_.push_back(std::make_pair(variables_.size(), name));
+    }
+    int num_variables_in_last_block() const {
+        assert(!var_offsets_.empty());
+        return variables_.size() - var_offsets_.back().first;
+    }
+    int offset_of_last_block() const {
+        assert(!var_offsets_.empty());
+        return var_offsets_.back().first;
+    }
 
     // support for pseudo boolean constraints
     void build_2_comparator(const std::string &prefix, int x1, int y1, std::vector<int> &z) { // z1 = max(x1,y1), z2 = min(x1,y1)
@@ -439,6 +450,145 @@ class Theory {
         }
     }
 };
+
+class VarClass {
+  protected:
+    int base_;
+    std::string varname_;
+    std::vector<int> multipliers_;
+    bool initialized_;
+    int verbose_;
+
+    template<typename T, typename ...Ts>
+    void fill_multipliers(const T &first, const Ts... args) {
+        //std::cout << __PRETTY_FUNCTION__ << std::endl;
+        multipliers_.push_back(first.size());
+        fill_multipliers(args...);
+    }
+    template<typename T>
+    void fill_multipliers(const T &first) {
+        //std::cout << __PRETTY_FUNCTION__ << std::endl;
+        multipliers_.push_back(first.size());
+    }
+
+    template<typename T, typename ...Ts>
+    void create_vars_helper2(SAT::Theory &theory,
+                             std::vector<int> &tuple,
+                             const T &first,
+                             const Ts... args) {
+        //std::cout << __PRETTY_FUNCTION__ << std::endl;
+        for( size_t i = 0; i < first.size(); ++i ) {
+            tuple.push_back(first[i]);
+            create_vars_helper(theory, tuple, args...);
+            tuple.pop_back();
+        }
+    }
+
+    template<typename ...Ts>
+    void create_vars_helper(SAT::Theory &theory,
+                            std::vector<int> &tuple,
+                            const Ts... args) {
+        //std::cout << __PRETTY_FUNCTION__ << std::endl;
+        create_vars_helper2(theory, tuple, args...);
+    }
+
+    template<typename ...Ts>
+    void create_vars(SAT::Theory &theory, const Ts... args) {
+        theory.push_new_vartype(varname_);
+        std::vector<int> tuple;
+        create_vars_helper(theory, tuple, args...);
+        if( verbose_ > 0 ) {
+            std::cout << varname_
+                      << ": #variables=" << theory.num_variables_in_last_block()
+                      << ", offset=" << theory.offset_of_last_block()
+                      << std::endl;
+        }
+    }
+
+    template<typename T, typename ...Ts> int calculate_index_helper(int i, int index, T &first, Ts... args) const {
+        //std::cout << __PRETTY_FUNCTION__ << std::endl;
+        assert(i < multipliers_.size());
+        assert((0 <= first) && (first < multipliers_.at(i)));
+        int new_index = index * multipliers_.at(i) + first;
+        return calculate_index(1 + i, new_index, args...);
+    }
+    
+  public:
+    VarClass(int verbose = 1) : initialized_(false), verbose_(verbose) { }
+    virtual ~VarClass() = default;
+
+    int base() const {
+        return base_;
+    }
+    const std::string& varname() const {
+        return varname_;
+    }
+    const std::vector<int>& multipliers() const {
+        return multipliers_;
+    }
+    int verbose() const {
+        return verbose_;
+    }
+    void set_verbose(int verbose) {
+        verbose_ = verbose;
+    }
+
+    template<typename ...Ts> void initialize(SAT::Theory &theory, const std::string &varname, Ts... args) {
+        assert(!initialized_);
+        base_ = theory.num_variables();
+        varname_ = varname;
+        fill_multipliers(args...);
+        create_vars(theory, args...);
+        initialized_ = true;
+    }
+
+    template<typename ...Ts> int calculate_index(int i, int index, Ts... args) const {
+        //std::cout << __PRETTY_FUNCTION__ << std::endl;
+        return calculate_index_helper(i, index, args...);
+    }
+    template<typename ...Ts> int operator()(Ts... args) const {
+        return base_ + calculate_index(0, 0, args...);
+    }
+    int operator()(const std::vector<int> &tuple) const {
+        assert(multipliers_.size() == tuple.size());
+        int index = 0;
+        for( size_t i = 0; i < tuple.size(); ++i ) {
+            assert((0 <= tuple[i]) && (tuple[i] < multipliers_.at(i)));
+            index *= multipliers_.at(i);
+            index += tuple[i];
+        }
+        return base_ + index;
+    }
+};
+
+template<>
+inline void VarClass::create_vars_helper(SAT::Theory &theory,
+                                         std::vector<int> &tuple) {
+    //std::cout << __PRETTY_FUNCTION__ << std::endl;
+    std::string name(varname_);
+    if( !tuple.empty() ) name += "(";
+    for( size_t i = 0; i < tuple.size(); ++i ) {
+        if( i > 0 ) name += ",";
+        name += std::to_string(tuple[i]);
+    }
+    if( !tuple.empty() ) name += ")";
+
+    int var_index = theory.new_variable(name);
+    if( verbose_ > 1 ) {
+        std::cout << "create_var:"
+                  << " name=" << name
+                  << ", index=" << var_index
+                  << std::endl;
+    }
+    assert(var_index == (*this)(tuple));
+}
+
+template<>
+inline int VarClass::calculate_index(int i, int index) const {
+    //std::cout << __PRETTY_FUNCTION__ << std::endl;
+    assert(i == multipliers_.size());
+    return index;
+}
 
 }; // namespace SAT
 
