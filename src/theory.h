@@ -58,7 +58,7 @@ class Theory {
     virtual void decode_model(std::ostream &os) const = 0;
 
     const Var& variable(int index) const {
-        assert((0 <= index) && (index < variables_.size()));
+        assert((0 <= index) && (index < int(variables_.size())));
         return *variables_[index];
     }
     const Literal& literal(int index) const {
@@ -185,7 +185,7 @@ class Theory {
     }
     void build_merge_network(const std::string &prefix, int n, const std::vector<int> &x, const std::vector<int> &y, std::vector<int> &z) {
         assert((n == 1) || (n % 2 == 0));
-        assert((x.size() == n) && (y.size() == n));
+        assert((int(x.size()) == n) && (int(y.size()) == n));
         if( n == 1 ) {
             build_2_comparator(prefix + "_base", x[0], y[0], z);
         } else {
@@ -200,9 +200,9 @@ class Theory {
             }
 
             build_merge_network(prefix + "_rec" + std::to_string(m), m, x1, y1, z1);
-            assert(z1.size() == n);
+            assert(int(z1.size()) == n);
             build_merge_network(prefix + "_rec" + std::to_string(m), m, x2, y2, z2);
-            assert(z2.size() == n);
+            assert(int(z2.size()) == n);
 
             z.push_back(z1[0]);
             for( int i = 0; i < n - 1; ++i )
@@ -212,16 +212,16 @@ class Theory {
     }
     void build_sorting_network(const std::string &prefix, int n, const std::vector<int> &x, std::vector<int> &z) {
         assert((n > 0) && (n % 2 == 0));
-        assert(x.size() == n);
+        assert(int(x.size()) == n);
         if( n == 2 ) {
             build_2_comparator(prefix + "_base", x[0], x[1], z);
         } else {
             int m = n >> 1;
             std::vector<int> x1(&x[0], &x[m]), z1;
-            assert(x1.size() == m);
+            assert(int(x1.size()) == m);
             build_sorting_network(prefix + "_rec" + std::to_string(m), m, x1, z1);
             std::vector<int> x2(&x[m], &x[n]), z2;
-            assert(x2.size() == m);
+            assert(int(x2.size()) == m);
             build_sorting_network(prefix + "_rec" + std::to_string(m), m, x2, z2);
             build_merge_network(prefix + "_merge" + std::to_string(m), m, z1, z2, z);
         }
@@ -241,7 +241,7 @@ class Theory {
             add_implication(IP);
             x.push_back(index);
         }
-        assert(x.size() == n);
+        assert(int(x.size()) == n);
 
         // build sorting network
         build_sorting_network(prefix + "_sort" + std::to_string(n), n, x, z);
@@ -400,7 +400,7 @@ class Theory {
         os << "p cnf " << variables_.size() << " " << implications_.size() << std::endl;
         size_t i = 0;
         for( size_t j = 0; j < implications_.size(); ++j ) {
-            while( (i < comments_.size()) && (comments_[i].first == j) ) {
+            while( (i < comments_.size()) && (comments_[i].first == int(j)) ) {
                 os << "c " << comments_[i].second << std::endl;
                 ++i;
             }
@@ -414,7 +414,7 @@ class Theory {
     void print(std::ostream &os) const {
         size_t i = 0;
         for( size_t j = 0; j < implications_.size(); ++j ) {
-            while( (i < comments_.size()) && (comments_[i].first == j) ) {
+            while( (i < comments_.size()) && (comments_[i].first == int(j)) ) {
                 os << "% " << comments_[i].second << std::endl;
                 ++i;
             }
@@ -586,7 +586,7 @@ inline void VarClass::create_vars_helper(SAT::Theory &theory,
 template<>
 inline int VarClass::calculate_index(int i, int index) const {
     //std::cout << __PRETTY_FUNCTION__ << std::endl;
-    assert(i == multipliers_.size());
+    assert(i == int(multipliers_.size()));
     return index;
 }
 
