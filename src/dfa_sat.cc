@@ -9,7 +9,8 @@
 #include "dfa.h"
 #include "graph.h"
 #include "sample.h"
-#include "theory.h"
+
+#include <sat/encoder/theory.h>
 
 using namespace std;
 
