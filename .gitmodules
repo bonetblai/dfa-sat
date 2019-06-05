@@ -1,0 +1,4 @@
+[submodule "sat-engine"]
+	path = sat-engine
+	url = https://github.com/bonetblai/sat-engine.git
+	branch = master
