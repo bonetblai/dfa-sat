@@ -9,10 +9,24 @@
 #include "dfa.h"
 #include "graph.h"
 #include "sample.h"
+#include "utils.h"
 
 #include <sat/encoder/theory.h>
 
+// strong typedefs for safer implementation
+#include <boost/serialization/strong_typedef.hpp>
+
 using namespace std;
+
+inline std::string color(const std::string &control_sequence, const std::string &str, bool use_colors = true) {
+    return use_colors ? control_sequence + str + Utils::normal() : str;
+}
+inline std::string cyan(const std::string &str, bool use_colors = true) {
+    return color(Utils::cyan(), str, use_colors);
+}
+inline std::string green(const std::string &str, bool use_colors = true) {
+    return color(Utils::green(), str, use_colors);
+}
 
 string filename(const string &prefix, int K, const string &suffix, bool opt = true) {
     string fn(prefix);
@@ -21,42 +35,16 @@ string filename(const string &prefix, int K, const string &suffix, bool opt = tr
     return fn;
 }
 
-template<typename T>
-class Items : public set<T> {
-    int num_;
-  public:
-    Items(int num = 0) : num_(num) { }
-    ~Items() { }
-    int num() const {
-        return num_;
-    }
-    void dump(ostream &os) const {
-        os << set<T>::size();
-        for( typename set<T>::const_iterator it = set<T>::begin(); it != set<T>::end(); ++it )
-            os << " " << *it;
-        os << endl;
-    }
-    void read(istream &is) {
-        for( size_t i = 0; i < num_; ++i ) {
-            T item;
-            is >> item;
-            set<T>::insert(item);
-        }
-    }
-    static const Items<T>* read_dump(istream &is) {
-        int num;
-        is >> num;
-        Items<T> *items = new Items<T>(num);
-        items->read(is);
-        cout << "Items::read_dump: #items=" << items->num() << endl;
-        return items;
-    }
-};
+// create strong typedefs (type aliases)
+BOOST_STRONG_TYPEDEF(int, Color)
+BOOST_STRONG_TYPEDEF(int, Label)
+BOOST_STRONG_TYPEDEF(int, Vertex)
 
 class Theory : public SAT::Theory {
   public:
     struct Options {
         string prefix_;
+        bool disable_colors_;
         bool redundant_;
         bool redundant_graph_edges_;
         bool break_symmetries_using_graph_clique_;
@@ -71,249 +59,203 @@ class Theory : public SAT::Theory {
 
   protected:
     const DFA::Sample &S_;
-    const int K_;
     const DFA::APTA<string> &apta_;
     const Options options_;
 
-    virtual void initialize_variables() {
-        // X variables: vertices x K
-        var_offsets_.push_back(make_pair(0, "X"));
-        for( int v = 0; v < apta_.num_vertices(); ++v ) {
-            for( int i = 0; i < K_; ++i ) {
-                int index = variables_.size();
-                string name = string("X(") + to_string(v) + "," + to_string(i) + ")";
-                variables_.push_back(new SAT::Var(index, name));
-                assert(index == X(v, i));
-            }
-        }
-        cout << "X: #variables=" << variables_.size() - var_offsets_.back().first << " (VN), offset=" << var_offsets_.back().first << endl;
+    const int num_colors_;
+    const int num_labels_;
+    const int num_vertices_;
 
-        // Z variables: K
-        var_offsets_.push_back(make_pair(variables_.size(), "Z"));
-        for( int i = 0; i < K_; ++i ) {
-            int index = variables_.size();
-            string name = string("Z(") + to_string(i) + ")";
-            variables_.push_back(new SAT::Var(index, name));
-            assert(index == Z(i));
-        }
-        cout << "Z: #variables=" << variables_.size() - var_offsets_.back().first << " (K), offset=" << var_offsets_.back().first << endl;
+    // parameters
+    vector<Color> p_colors_;
+    vector<Label> p_labels_;
+    vector<Vertex> p_vertices_;
 
-        // Y variables: labels x K x K
-        var_offsets_.push_back(make_pair(variables_.size(), "Y"));
-        for( int a = 0; a < apta_.num_labels(); ++a ) {
-            for( int i = 0; i < K_; ++i ) {
-                for( int j = 0; j < K_; ++j ) {
-                    int index = variables_.size();
-                    string name = string("Y(") + to_string(a) + "," + to_string(i) + "," + to_string(j) + ")";
-                    variables_.push_back(new SAT::Var(index, name));
-                    assert(index == Y(a, i, j));
-                }
-            }
-        }
-        cout << "Y: #variables=" << variables_.size() - var_offsets_.back().first << " (LK^2), offset=" << var_offsets_.back().first << endl;
+    // variables
+    SAT::VarSet color, Y, accept;
+
+  public:
+    Theory(const DFA::Sample &S, const DFA::APTA<string> &apta, int num_colors, const Options &options)
+      : SAT::Theory(options.decode_),
+        S_(S),
+        apta_(apta),
+        options_(options),
+        num_colors_(num_colors),
+        num_labels_(apta_.num_labels()),
+        num_vertices_(apta_.num_vertices()) {
+        initialize(cout);
+        build_variables();
+    }
+    virtual ~Theory() { }
+
+  protected:
+    void initialize(ostream &os) {
+        os << "Theory:"
+           << " parameters:" << " K=" << num_colors_
+           << ", #labels=" << num_labels_
+           << ", #vertices=" << num_vertices_
+           << ", #V_accept=" << apta_.accept().size()
+           << ", #V_reject=" << apta_.reject().size()
+           << endl;
+
+        // construct parameter lists
+        p_colors_ = vector<Color>(num_colors_);
+        iota(p_colors_.begin(), p_colors_.end(), 0);
+        p_labels_ = vector<Label>(apta_.num_labels());
+        iota(p_labels_.begin(), p_labels_.end(), 0);
+        p_vertices_ = vector<Vertex>(apta_.num_vertices());
+        iota(p_vertices_.begin(), p_vertices_.end(), 0);
     }
 
-    virtual void build_base() {
-        imp_offsets_.push_back(make_pair(0, "X"));
-        add_comment("Theory for formulas X(v,i)");
-        build_formulas_X();
-        cout << "X: #implications=" << implications_.size() - imp_offsets_.back().first << " (V + V * (K-1) * K / 2 + ?)" << endl;
-        //print_implications(cout, imp_offsets_.back().first, implications_.size());
-
-        imp_offsets_.push_back(make_pair(implications_.size(), "Y"));
-        add_comment("Theory for formulas Y(a,i,j)");
-        build_formulas_Y();
-        cout << "Y: #implications=" << implications_.size() - imp_offsets_.back().first << " (L * K^2 * (K-1) / 2 + L * K)" << endl;
-        //print_implications(cout, imp_offsets_.back().first, implications_.size());
-
-        imp_offsets_.push_back(make_pair(implications_.size(), "XZ"));
-        add_comment("Theory for formulas X(v,i) and Z(i)");
-        build_formulas_XZ();
-        cout << "XZ: #implications=" << implications_.size() - imp_offsets_.back().first << " (K * (V_accept + V_reject))" << endl;
-        //print_implications(cout, imp_offsets_.back().first, implications_.size());
-
-        imp_offsets_.push_back(make_pair(implications_.size(), "XY"));
-        add_comment("Theory for formulas X(v,i) and Y(a,i,j)");
-        build_formulas_XY();
-        cout << "XY: #implications=" << implications_.size() - imp_offsets_.back().first << " (2 * (V-1) * K^2)" << endl;
-        //print_implications(cout, imp_offsets_.back().first, implications_.size());
+    void initialize_variables() override {
+        color.initialize(*this, "color(v,k)", p_vertices_, p_colors_);
+        Y.initialize(*this, "Y(l,k,kp)", p_labels_, p_colors_, p_colors_);
+        accept.initialize(*this, "accept(k)", p_colors_);
     }
 
-    virtual void build_rest() {
-        if( options_.redundant_graph_edges_ || options_.break_symmetries_using_graph_clique_ ) {
-            Graph::Undirected g;
-            cout << "----------- constructing undirected graph -----------" << endl;
-            cout << "apta: #accept=" << apta_.accept().size() << ", #reject=" << apta_.reject().size() << endl;
-            apta_.build_induced_undirected_graph(g);
-            //cout << "graph" << endl;
-            //g.dump(cout);
-            cout << "undirected graph: #vertices=" << g.num_vertices() << ", #edges=" << g.num_edges() << std::endl;
+    // base formulas
 
-            if( options_.redundant_graph_edges_ ) {
-                cout << "---- add redundant implications from graph edges ----" << endl;
-                add_implications_from_graph_edges(g);
-            }
+    // exactly one color per vertex
+    void build_formulas_exactly_1_color(Vertex v) {
+        assert((0 <= v) && (v < num_vertices_));
+        std::vector<int> literals(num_colors_);
+        for( Color k = Color(0); k < num_colors_; ++k )
+            literals[k] = 1 + color(v, k);
+        exactly_1(string("color-exactly-1(") + to_string(v) + ")", literals);
+    }
+    void build_formulas_exactly_1_color(ostream &os) {
+        imp_offsets_.push_back(std::make_pair(num_implications(), "exactly-1 { color(v,k) : 0 <= k < #colors }"));
+        add_comment("exactly-1 { color(v,k) : 0 <= k < #colors }");
+        for( Vertex v = Vertex(0); v < num_vertices_; ++v )
+            build_formulas_exactly_1_color(v);
+        os << "(1) exactly-1 { color(v,k) : 0 <= k < #colors }: #implications=" << num_implications() - imp_offsets_.back().first << endl;
+    }
 
-            if( options_.break_symmetries_using_graph_clique_ ) {
-                cout << "------------- add clauses from clique ---------------" << endl;
-                break_symmetries_using_graph_clique(g);
-            }
+    // exactly one color for parent-relation
+    void build_formulas_exactly_1_parent_relation(Label l, Color k) {
+        assert((0 <= l) && (l < num_labels_));
+        assert((0 <= k) && (k < num_colors_));
+        std::vector<int> literals(num_colors_);
+        for( Color kp = Color(0); kp < num_colors_; ++kp )
+            literals[kp] = 1 + Y(l, k, kp);
+        exactly_1(string("parent-relation-exactly-1(") + to_string(l) + "," + to_string(k) + ")", literals);
+    }
+    void build_formulas_exactly_1_parent_relation(ostream &os) {
+        imp_offsets_.push_back(std::make_pair(num_implications(), "exactly-1 { Y(l,k,kp) : 0 <= kp < #colors }"));
+        add_comment("exactly-1 { Y(l,k,kp) : 0 <= kp < #colors }");
+        for( Label l = Label(0); l < num_labels_; ++l ) {
+            for( Color k = Color(0); k < num_colors_; ++k )
+                build_formulas_exactly_1_parent_relation(l, k);
         }
+        os << "(2) exactly-1 { Y(l,k,kp) : 0 <= kp < #colors }: #implications=" << num_implications() - imp_offsets_.back().first << endl;
     }
 
-    // references to variables
-    int X(int v, int i) const { // v in vertices, i in {0, ..., K-1}
-        assert((0 <= v) && (v < apta_.num_vertices()));
-        assert((0 <= i) && (i < K_));
-        int index = i + K_ * v;
-        assert(var_offsets_[0].second == "X");
-        return var_offsets_[0].first + index;
+    // separate colors
+    // [v is accepting] color(v,k) => accept(k)
+    // [v isn't accepting] color(v,k) => -accept(k)
+    void build_formulas_separate_colors(Color k, Vertex v, bool accepting) {
+        assert((0 <= k) && (k < num_colors_));
+        assert((0 <= v) && (v < num_vertices_));
+        SAT::Implication *IP = new SAT::Implication;
+        IP->add_antecedent(1 + color(v, k));
+        IP->add_consequent(accepting ? 1 + accept(k) : -(1 + accept(k)));
+        add_implication(IP);
     }
-    int Z(int i) const { // i in {0, ..., K-1}
-        assert((0 <= i) && (i < K_));
-        int index = i;
-        assert(var_offsets_[1].second == "Z");
-        return var_offsets_[1].first + index;
-    }
-    int Y(int a, int i, int j) const { // a in label, i, j in {0, ..., K-1}
-        assert((0 <= a) && (a < apta_.num_labels()));
-        assert((0 <= i) && (i < K_));
-        assert((0 <= j) && (j < K_));
-        int index = j + K_ * (i + K_ * a);
-        assert(var_offsets_[2].second == "Y");
-        return var_offsets_[2].first + index;
-    }
-
-    // construction of base formulas
-    void build_formulas_X() {
-        // each vertex has at least one color (required)
-        for( int v = 0; v < apta_.num_vertices(); ++v ) {
-            SAT::Implication *IP = new SAT::Implication;
-            for( int i = 0; i < K_; ++i )
-                IP->add_consequent(1 + X(v, i));
-            add_implication(IP);
+    void build_formulas_separate_colors(ostream &os) {
+        imp_offsets_.push_back(std::make_pair(num_implications(), "color(v,k) => accept(k)[v is accepting] v -accept(k)[v isn't accepting]"));
+        add_comment("color(v,k) => accept(k)[v is accepting] v -accept(k)[v isn't accepting]");
+        for( Color k = Color(0); k < num_colors_; ++k ) {
+            for( set<int>::const_iterator it = apta_.accept().begin(); it != apta_.accept().end(); ++it )
+                build_formulas_separate_colors(k, Vertex(*it), true);
+            for( set<int>::const_iterator it = apta_.reject().begin(); it != apta_.reject().end(); ++it )
+                build_formulas_separate_colors(k, Vertex(*it), false);
         }
-
-        // each vertex has at most one color (redundant)
-        if( options_.redundant_ ) {
-            for( int v = 0; v < apta_.num_vertices(); ++v ) {
-                for( int i = 0; i < K_; ++i ) {
-                    for( int j = 1 + i; j < K_; ++j ) {
-                        SAT::Implication *IP = new SAT::Implication;
-                        IP->add_consequent(-(1 + X(v, i)));
-                        IP->add_consequent(-(1 + X(v, j)));
-                        add_implication(IP);
-                    }
-                }
-            }
-        }
+        os << "(3) color(v,k) => accept(k)[v is accepting] v -accept(k)[v isn't accepting]: #implications=" << num_implications() - imp_offsets_.back().first << std::endl;
     }
 
-    void build_formulas_Y() {
-        // each parent relation targets at most one color (required)
-        for( int a = 0; a < apta_.num_labels(); ++a ) {
-            for( int i = 0; i < K_; ++i ) {
-                for( int j = 0; j < K_; ++j ) {
-                    for( int h = 0; h < j; ++h ) {
-                        SAT::Implication *IP = new SAT::Implication;
-                        IP->add_consequent(-(1 + Y(a, i, h)));
-                        IP->add_consequent(-(1 + Y(a, i, j)));
-                        add_implication(IP);
-                    }
-                }
-            }
-        }
+    // color(u,k) => [ color(v,kp) <=> Y(u.label,k,kp) ] [ (u,v) ]
+    void build_formulas_color_then_color_iff_Y(Vertex u, Vertex v, Label l, Color k, Color kp) {
+        assert((0 <= u) && (u < num_vertices_));
+        assert((0 <= v) && (v < num_vertices_));
+        assert((0 <= l) && (l < num_labels_));
+        assert((0 <= k) && (k < num_colors_));
+        assert((0 <= kp) && (kp < num_colors_));
 
-        // each parent relation targets at least one color (redundant)
-        if( options_.redundant_ ) {
-            for( int a = 0; a < apta_.num_labels(); ++a ) {
-                for( int i = 0; i < K_; ++i ) {
-                    SAT::Implication *IP = new SAT::Implication;
-                    for( int j = 0; j < K_; ++j )
-                        IP->add_consequent(1 + Y(a, i, j));
-                    add_implication(IP);
-                }
-            }
-        }
+        // color(u,k) & color(v,kp) => Y(u.label,k,kp) [ (u,v) ]
+        SAT::Implication *IP1 = new SAT::Implication;
+        IP1->add_antecedent(1 + color(u, k));
+        IP1->add_antecedent(1 + color(v, kp));
+        IP1->add_consequent(1 + Y(l, k, kp));
+        add_implication(IP1);
+
+        // color(u,k) & Y(u,label,k,kp) => color(v,kp) [ (u,v) ]
+        SAT::Implication *IP2 = new SAT::Implication;
+        IP2->add_antecedent(1 + color(u, k));
+        IP2->add_antecedent(1 + Y(l, k, kp));
+        IP2->add_consequent(1 + color(v, kp));
+        add_implication(IP2);
     }
+    void build_formulas_color_then_color_iff_Y(ostream &os) {
+        imp_offsets_.push_back(std::make_pair(num_implications(), "color(u,k) => [ color(v,kp) <=> Y(u.label,k,kp) ] [ (u,v) ]"));
+        add_comment("color(u,k) => [ color(v,kp) <=> Y(u.label,k,kp) ] [ (u,v) ]");
 
-    void build_formulas_XZ() {
-        // accepting vertices cannot have same color as rejecting ones (required)
-        for( int i = 0; i < K_; ++i ) {
-            for( set<int>::const_iterator it = apta_.accept().begin(); it != apta_.accept().end(); ++it ) {
-                SAT::Implication *IP = new SAT::Implication;
-                IP->add_consequent(-(1 + X(*it, i)));
-                IP->add_consequent(1 + Z(i));
-                add_implication(IP);
-            }
-            for( set<int>::const_iterator it = apta_.reject().begin(); it != apta_.reject().end(); ++it ) {
-                SAT::Implication *IP = new SAT::Implication;
-                IP->add_consequent(-(1 + X(*it, i)));
-                IP->add_consequent(-(1 + Z(i)));
-                add_implication(IP);
-            }
-        }
-    }
-
-    void build_formulas_XY() {
-        // parent relation set when a vertex and its parent are colored (required)
-        for( int v = 0; v < apta_.num_vertices(); ++v ) {
-            std::pair<int, int> p = apta_.parent(v);
+        for( Vertex v = Vertex(0); v < num_vertices_; ++v ) {
+            pair<int, int> p = apta_.parent(v);
             assert((p.first != -1) || (v == apta_.initial_vertex()));
             if( v == apta_.initial_vertex() ) continue;
-            for( int i = 0; i < K_; ++i ) {
-                for( int j = 0; j < K_; ++j ) {
-                    SAT::Implication *IP = new SAT::Implication;
-                    IP->add_antecedent(1 + X(p.first, i));
-                    IP->add_antecedent(1 + X(v, j));
-                    IP->add_consequent(1 + Y(p.second, i, j));
-                    add_implication(IP);
-                }
+
+            Vertex u = Vertex(p.first);
+            Label l = Label(p.second);
+            for( Color k = Color(0); k < num_colors_; ++k ) {
+                for( Color kp = Color(0); kp < num_colors_; ++kp )
+                    build_formulas_color_then_color_iff_Y(u, v, l, k, kp);
             }
         }
 
-        // parent relation forces vertex once parent is colored (redundant)
-        if( options_.redundant_ ) {
-            for( int v = 0; v < apta_.num_vertices(); ++v ) {
-                std::pair<int, int> p = apta_.parent(v);
-                assert((p.first != -1) || (v == apta_.initial_vertex()));
-                if( v == apta_.initial_vertex() ) continue;
-                for( int i = 0; i < K_; ++i ) {
-                    for( int j = 0; j < K_; ++j ) {
-                        SAT::Implication *IP = new SAT::Implication;
-                        IP->add_antecedent(1 + Y(p.second, i, j));
-                        IP->add_antecedent(1 + X(p.first, i));
-                        IP->add_consequent(1 + X(v, j));
-                        add_implication(IP);
-                    }
-                }
-            }
-        }
+        os << "(4) color(u,k) => [ color(v,kp) <=> Y(u.label,k,kp) ] [ (u,v) ]: #implications=" << num_implications() - imp_offsets_.back().first << std::endl;
     }
 
-    void add_implications_from_graph_edges(const Graph::Undirected &g) {
-        imp_offsets_.push_back(make_pair(implications_.size(), "edges"));
+    void build_base() override {
+        cout << green("Each vertex has exactly one color:", !options_.disable_colors_) << endl;
+        build_formulas_exactly_1_color(cout);
+
+        cout << green("Each parent relation has exactly one color:", !options_.disable_colors_) << endl;
+        build_formulas_exactly_1_parent_relation(cout);
+
+        cout << green("Separate colors between accepting and non-accepting:", !options_.disable_colors_) << endl;
+        build_formulas_separate_colors(cout);
+
+        cout << green("Parents 1:", !options_.disable_colors_) << endl;
+        build_formulas_color_then_color_iff_Y(cout);
+    }
+
+    // rest
+
+    void add_implications_from_graph_edges(ostream &os, const Graph::Undirected &g) {
+        imp_offsets_.push_back(make_pair(num_implications(), "edges"));
         add_comment(string("Redundant clauses from graph edges: #vertices=") + to_string(g.num_vertices()) + " #edges=" + to_string(g.num_edges() >> 1));
-        for( int src = 0; src < g.num_vertices(); ++src ) {
+
+        for( Vertex src = Vertex(0); src < num_vertices_; ++src ) {
             const vector<int> &edges = g.edges(src);
             for( size_t i = 0; i < edges.size(); ++i ) {
-                int dst = edges[i];
+                Vertex dst = Vertex(edges[i]);
                 assert(src != dst);
                 if( src < dst ) {
                     // add constraint: color(src) != color(dst)
-                    for( int i = 0; i < K_; ++i ) {
+                    for( Color k = Color(0); k < num_colors_; ++k ) {
                         SAT::Implication *IP = new SAT::Implication;
-                        IP->add_consequent(-(1 + X(src, i)));
-                        IP->add_consequent(-(1 + X(dst, i)));
+                        IP->add_consequent(-(1 + color(src, k)));
+                        IP->add_consequent(-(1 + color(dst, k)));
                         add_implication(IP);
                     }
                 }
             }
         }
-        cout << "#implications=" << implications_.size() - imp_offsets_.back().first << endl;
+
+        os << "edges: #implications=" << num_implications() - imp_offsets_.back().first << endl;
     }
 
-    void break_symmetries_using_graph_clique(const Graph::Undirected &g) {
+    void break_symmetries_using_graph_clique(ostream &os, const Graph::Undirected &g) {
         // calculate accept/reject cliques
         set<int> accept_clique, reject_clique;
         g.find_large_clique_greedy(apta_.accept(), accept_clique);
@@ -324,64 +266,71 @@ class Theory : public SAT::Theory {
         clique.insert(accept_clique.begin(), accept_clique.end());
         clique.insert(reject_clique.begin(), reject_clique.end());
         assert(clique.size() == accept_clique.size() + reject_clique.size());
-        cout << "clique: size=" << clique.size() << ", accept-clique.size=" << accept_clique.size() << ", reject-clique.size=" << reject_clique.size() << endl;
+        os << "clique: size=" << clique.size() << ", accept-clique.size=" << accept_clique.size() << ", reject-clique.size=" << reject_clique.size() << endl;
 
         // if not enough color, add empty clause, else assign different color to vertices in clique
-        imp_offsets_.push_back(make_pair(implications_.size(), "clique"));
+        imp_offsets_.push_back(make_pair(num_implications(), "clique"));
         add_comment(string("Theory for breaking symmetries: #vertices=") + to_string(g.num_vertices()) + " #edges=" + to_string(g.num_edges() >> 1) + " clique-size=" + to_string(clique.size()));
-        if( K_ < clique.size() ) {
-            clear_implications();
+
+        if( num_colors_ < clique.size() ) {
             SAT::Implication *IP = new SAT::Implication;
             add_implication(IP);
         } else {
-            int color = 0;
-            for( set<int>::const_iterator it = clique.begin(); it != clique.end(); ++it, ++color ) {
-                // assign color to vertex *it
-                assert(color < K_);
+            Color k = Color(0);
+            for( set<int>::const_iterator it = clique.begin(); it != clique.end(); ++it, ++k ) {
+                // assign color k to vertex *it
+                assert(k < num_colors_);
                 SAT::Implication *IP = new SAT::Implication;
-                IP->add_consequent(1 + X(*it, color));
+                IP->add_consequent(1 + color(*it, k));
                 add_implication(IP);
             }
         }
-        cout << "#implications=" << implications_.size() - imp_offsets_.back().first << endl;
+
+        os << "clique: #implications=" << num_implications() - imp_offsets_.back().first << endl;
+    }
+
+    void build_rest() override {
+        if( !options_.decode_ && (options_.redundant_graph_edges_ || options_.break_symmetries_using_graph_clique_) ) {
+            Graph::Undirected g;
+            cout << "----------- constructing undirected graph -----------" << endl;
+            cout << "apta: #accept=" << apta_.accept().size() << ", #reject=" << apta_.reject().size() << endl;
+            apta_.build_induced_undirected_graph(g);
+            cout << "undirected graph: #vertices=" << g.num_vertices() << ", #edges=" << g.num_edges() << endl;
+
+            if( options_.redundant_graph_edges_ ) {
+                cout << "---- add redundant implications from graph edges ----" << endl;
+                add_implications_from_graph_edges(cout, g);
+            }
+
+            if( options_.break_symmetries_using_graph_clique_ ) {
+                cout << "------------- add clauses from clique ---------------" << endl;
+                break_symmetries_using_graph_clique(cout, g);
+            }
+        }
     }
 
   public:
-    Theory(const DFA::Sample &S, int K, const DFA::APTA<string> &apta, const Options &options)
-      : SAT::Theory(options.decode_),
-        S_(S), K_(K), apta_(apta), options_(options) {
-        cout << "Theory:"
-             << " parameters:" << " K=" << K_
-             << ", #labels=" << apta_.num_labels()
-             << ", #vertices=" << apta_.num_vertices()
-             << ", #V_accept=" << apta_.accept().size()
-             << ", #V_reject=" << apta_.reject().size()
-             << endl;
-        build_theory();
-    }
-    virtual ~Theory() { }
-
     // print abstraction coded in model
     void decode_model(DFA::DFA<string> &dfa) const {
         assert(satisfiable_ && (model_.size() == variables_.size()));
         //print_model(cout);
 
         // vertex colors
-        vector<int> color(apta_.num_vertices(), -1);
-        vector<vector<int> > group(K_);
-        for( int v = 0; v < apta_.num_vertices(); ++v ) {
-            for( int i = 0; i < K_; ++i ) {
-                if( model_[X(v, i)] ) {
-                    color[v] = i;
-                    group[i].push_back(v);
+        vector<int> colors(num_vertices_, -1);
+        vector<vector<int> > group(num_colors_);
+        for( Vertex v = Vertex(0); v < num_vertices_; ++v ) {
+            for( Color k = Color(0); k < num_colors_; ++k ) {
+                if( model_[color(v, k)] ) {
+                    colors[v] = k;
+                    group[k].push_back(v);
                 }
             }
             //os << "// color of vertex v" << v << " is " << color[v] << endl;
         }
 
         // build DFA
-        assert(K_ == dfa.num_states());
-        for( int i = 0; i < K_; ++i ) {
+        assert(num_colors_ == dfa.num_states());
+        for( int i = 0; i < num_colors_; ++i ) {
             for( int j = 0; j < group[i].size(); ++j ) {
                 int src = group[i][j];
                 const vector<pair<int, int> > &edges = apta_.edges(src);
@@ -390,28 +339,28 @@ class Theory : public SAT::Theory {
                     const string &label = apta_.get_label(label_index);
                     label_index = dfa.get_label_index(label);
                     if( label_index == -1 ) label_index = dfa.add_label(label);
-                    int dst = dfa.edge(color[src], label_index);
+                    int dst = dfa.edge(colors[src], label_index);
                     if( dst == -1 ) {
                         dst = edges[k].second;
-                        //cout << "dfa: add_edge: src=" << color[src] << ", dst=" << color[dst] << ", label=|" << label << "|" << endl;
-                        dfa.add_edge(color[src], label_index, color[dst]);
+                        //cout << "dfa: add_edge: src=" << colors[src] << ", dst=" << colors[dst] << ", label=|" << label << "|" << endl;
+                        dfa.add_edge(colors[src], label_index, colors[dst]);
                     } else {
-                        assert(dst == color[edges[k].second]);
+                        assert(dst == colors[edges[k].second]);
                     }
                 }
             }
         }
 
         // set initial and accepting states
-        dfa.set_initial_state(color[apta_.initial_vertex()]);
+        dfa.set_initial_state(colors[apta_.initial_vertex()]);
         for( set<int>::const_iterator it = apta_.accept().begin(); it != apta_.accept().end(); ++it )
-            dfa.mark_as_accept(color[*it]);
+            dfa.mark_as_accept(colors[*it]);
 
         // simplify
         dfa.remove_redundant_non_accepting_states();
     }
-    virtual void decode_model(ostream &os) const {
-        DFA::DFA<string> dfa(K_);
+    void decode_model(ostream &os) const override {
+        DFA::DFA<string> dfa(num_colors_);
         decode_model(dfa);
         dfa.dump(os);
     }
@@ -420,14 +369,14 @@ class Theory : public SAT::Theory {
 const DFA::Sample* read_data(const string &sample_filename) {
     const DFA::Sample* sample = nullptr;
 
-    cout << "reading '" << sample_filename << "' ... " << flush;
+    cout << Utils::cyan() << "reading '" << sample_filename << "' ... " << Utils::normal() << flush;
     ifstream ifs_sample(sample_filename.c_str());
     if( !ifs_sample.fail() ) {
         sample = DFA::Sample::read_dump(ifs_sample);
         ifs_sample.close();
     } else {
         throw runtime_error("error: opening file '" + sample_filename + "'");
-        cout << "error: opening file '" << sample_filename << "'" << endl;
+        cout << Utils::error() << "opening file '" << sample_filename << "'" << endl;
     }
 
     return sample;
@@ -472,7 +421,7 @@ int main(int argc, const char **argv) {
         } else if( string(*argv) == "--enable-redundant-graph-edges" ) {
             options.redundant_graph_edges_ = true;
         } else {
-            cout << "error: unrecognized option '" << *argv << "'" << endl;
+            cout << Utils::error() << "unrecognized option '" << *argv << "'" << endl;
             usage(cout, name);
             exit(0);
         }
@@ -494,56 +443,89 @@ int main(int argc, const char **argv) {
 
     // read data
     const DFA::Sample *S = read_data(sample_filename);
+
+    // build apta
+    cout << "building APTA ..." << flush;
     const DFA::APTA<string> *apta = S->build_APTA();
+    cout << " done!" << endl;
 
     // create theory
-    Theory Th(*S, K, *apta, options);
-    cout << "#variables=" << Th.num_variables() << endl;
-    cout << "#implications=" << Th.num_implications() << endl;
+    Theory theory(*S, *apta, K, options);
 
     // decode
     if( options.decode_ ) {
+        // perform void construction to terminate generation of (auxiliary) variables
+        theory.build_theory();
+
+        // report theory size
+        cout << "#variables=" << theory.num_variables() << endl;
+        cout << "#implications=" << theory.num_implications() << endl;
+
+        // read model
         string model_filename = filename(options.prefix_, K, "_model.cnf");
-        cout << "reading file '" << model_filename << "' ..." << flush;
+        cout << Utils::cyan() << "reading file '" << model_filename << "' ..." << Utils::normal() << flush;
         ifstream ifs(model_filename.c_str());
         if( !ifs.fail() ) {
-            Th.read_minisat_output(ifs);
+            // read model w/ appropriate reader; to decide, extract header and re-open file
+            string header;
+            ifs >> header;
             ifs.close();
-            cout << " done!" << endl;
+            ifs.open(model_filename.c_str());
+            assert(!ifs.fail());
+
+            if( (header == "SAT") || (header == "UNSAT") )
+                theory.read_minisat_output(ifs);
+            else if( isdigit(*header.c_str()) || (*header.c_str() == '-') )
+                theory.read_glucose_output(ifs);
+            else
+                theory.read_other_output(ifs);
+
+            ifs.close();
+            cout << Utils::cyan() << " done!" << Utils::normal() << endl;
 
             // get dfa from model
             DFA::DFA<string> dfa(K);
-            Th.decode_model(dfa);
+            theory.decode_model(dfa);
 
             // output dfa in .dot format
             string dot_filename = filename(options.prefix_, K, "_dfa.dot");
-            cout << "writing file '" << dot_filename << "' ..." << flush;
+            cout << Utils::cyan() << "writing file '" << dot_filename << "' ..." << Utils::normal() << flush;
             ofstream dot_os(dot_filename.c_str());
             dfa.dump_dot(dot_os);
             dot_os.close();
-            cout << " done!" << endl;
+            cout << Utils::cyan() << " done!" << Utils::normal() << endl;
 
             // output dfa in .dfa format
             string dfa_filename = filename(options.prefix_, K, ".dfa");
-            cout << "writing file '" << dfa_filename << "' ..." << flush;
+            cout << Utils::cyan() << "writing file '" << dfa_filename << "' ..." << Utils::normal() << flush;
             ofstream dfa_os(dfa_filename.c_str());
             dfa.dump(dfa_os);
             dfa_os.close();
-            cout << " done!" << endl;
+            cout << Utils::cyan() << " done!" << Utils::normal() << endl;
         } else {
-            cout << "error: opening file '" << model_filename << "'" << endl;
+            cout << Utils::error() << "opening file '" << model_filename << "'" << endl;
         }
     } else {
         // output theory in human readable format
-        //Th.print(cout);
+        //theory.print(cout);
 
-        // output theory in SATLIB format
+        // open output stream (tunnel)
         string theory_filename = filename(options.prefix_, K, "_theory.cnf");
-        cout << "writing file '" << theory_filename << "' ..." << flush;
-        ofstream os(theory_filename.c_str());
-        Th.dump(os);
-        os.close();
-        cout << " done!" << endl;
+        cout << Utils::cyan() << "set tunnel to '" << theory_filename << "'" << Utils::normal() << endl;
+        ofstream ofs(theory_filename.c_str());
+        theory.set_tunnel(&ofs);
+
+        // build theory (generate output)
+        theory.build_theory();
+
+        // report theory size
+        cout << "#variables=" << theory.num_variables() << endl;
+        cout << "#implications=" << theory.num_implications() << endl;
+
+        // close output stream (tunnel)
+        ofs << theory.header() << std::endl;
+        ofs.close();
+        theory.set_tunnel(nullptr);
     }
 
     delete S;
