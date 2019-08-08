@@ -75,7 +75,7 @@ class Theory : public SAT::Theory {
     const DFA::APTA<string> &apta_;
     const Options options_;
 
-    virtual void build_variables() {
+    virtual void initialize_variables() {
         // X variables: vertices x K
         var_offsets_.push_back(make_pair(0, "X"));
         for( int v = 0; v < apta_.num_vertices(); ++v ) {
