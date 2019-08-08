@@ -213,7 +213,7 @@ template<typename T> class DFA {
         for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it )
             os << " q" << *it;
         os << std::endl;
-        for( size_t q = 0; q < num_states_; ++q ) {
+        for( int q = 0; q < num_states_; ++q ) {
             for( size_t i = 0; i < edges_[q].size(); ++i ) {
                 int label_index = edges_[q][i].first;
                 const T &label = get_label(label_index);

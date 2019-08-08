@@ -82,7 +82,7 @@ class Undirected {
         // extend clique by adding vertices with highest degree
         // connected to all vertices in clique
         int old_size = 0;
-        while( old_size != clique.size() ) {
+        while( old_size != int(clique.size()) ) {
             old_size = clique.size();
 
             int vertex = -1;
