@@ -488,7 +488,7 @@ int main(int argc, const char **argv) {
             theory.decode_model(dfa);
 
             // output dfa in .dot format
-            string dot_filename = filename(options.prefix_, K, "_dfa.dot");
+            string dot_filename = filename(options.prefix_, K, ".dot");
             cout << Utils::cyan() << "writing file '" << dot_filename << "' ..." << Utils::normal() << flush;
             ofstream dot_os(dot_filename.c_str());
             dfa.dump_dot(dot_os);
