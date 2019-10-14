@@ -24,11 +24,13 @@ template<typename T> class DFA {
     std::vector<T> labels_;
     std::vector<std::vector<std::pair<int, int> > > edges_;
     std::map<T, int> labels_map_;
+    std::vector<T> state_labels_;
 
   public:
     DFA(int num_states = 0)
       : num_states_(num_states), num_labels_(0), num_edges_(0), initial_state_(-1) {
         edges_ = std::vector<std::vector<std::pair<int, int> > >(num_states_);
+        state_labels_ = std::vector<T>(num_states_);
     }
     virtual ~DFA() = default;
 
@@ -98,12 +100,17 @@ template<typename T> class DFA {
     // modifiers
     int add_state() {
         edges_.push_back(std::vector<std::pair<int, int> >());
+        state_labels_.push_back("");
         return num_states_++;
     }
     void set_initial_state(int state) {
         assert((0 <= state) && (state < num_states_));
         initial_state_ = state;
     }
+    void set_state_label(int state, const T &label) {
+        state_labels_[state] = label;
+    }
+
     int add_label(const T &label) {
         labels_.push_back(label);
         labels_map_.insert(std::make_pair(label, num_labels_));
@@ -211,32 +218,47 @@ template<typename T> class DFA {
         if( initial_state_ != -1 ) os << "// initial state: q" << initial_state_ << std::endl;
         os << "// accepting states:";
         for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it )
-            os << " q" << *it;
+            os << " " << *it;
         os << std::endl;
         for( int q = 0; q < num_states_; ++q ) {
             for( size_t i = 0; i < edges_[q].size(); ++i ) {
                 int label_index = edges_[q][i].first;
                 const T &label = get_label(label_index);
                 int t = edges_[q][i].second;
-                os << "// edge q" << q << " -> q" << t << " w/ label " << label << std::endl;
+                os << "// edge " << q << " -> " << t << " w/ label " << label << std::endl;
             }
         }
 
         os << "digraph dfa {" << std::endl;
-        if( initial_state_ != -1 ) os << "    node [shape = point ]; init;" << std::endl;
-        os << "    node [shape = doublecircle];" << std::endl;
-        for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it )
-            os << "    q" << *it << ";" << std::endl;
 
-        os << "    node [shape = circle];" << std::endl;
+        // initial and accepting states
+        if( initial_state_ != -1 ) os << "    init [shape = point];" << std::endl;
+        for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it ) {
+            os << "    " << *it << " [shape = doublecircle";
+            if( !state_labels_.at(*it).empty() )
+                os << ", label = \"" << state_labels_.at(*it) << "\"";
+            os << "];" << std::endl;
+        }
+
+        // other states
+        for( int q = 0; q < num_states_; ++q ) {
+            if( !accept(q) ) {
+                os << "    " << q << " [shape = circle";
+                if( !state_labels_.at(q).empty() )
+                    os << ", label = \"" << state_labels_.at(q) << "\"";
+                os << "];" << std::endl;
+            }
+        }
+
+        // edges
         for( int q = 0; q < num_states_; ++q ) {
             for( size_t i = 0; i < edges_[q].size(); ++i ) {
                 const T &label = get_label(edges_[q][i].first);
                 int t = edges_[q][i].second;
-                os << "    q" << q << " -> q" << t << " [label=\"" << label << "\"];" << std::endl;
+                os << "    " << q << " -> " << t << " [label=\"" << label << "\"];" << std::endl;
             }
         }
-        if( initial_state_ != -1 ) os << "    init -> q" << initial_state_ << ";" << std::endl;
+        if( initial_state_ != -1 ) os << "    init -> " << initial_state_ << ";" << std::endl;
         os << "}" << std::endl;
     }
 
