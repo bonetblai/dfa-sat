@@ -19,7 +19,7 @@ template<typename T> class DFA {
     int num_labels_;
     int num_edges_;
     int initial_state_;
-    std::set<int> accept_;
+    std::vector<std::set<int> > state_classes_; // first one is 'accepting states'
 
     std::vector<T> labels_;
     std::vector<std::vector<std::pair<int, int> > > edges_;
@@ -57,11 +57,36 @@ template<typename T> class DFA {
         return true;
     }
 
+    int num_state_classes() const {
+        return state_classes_.size();
+    }
+    bool belong(int state, int i) const {
+        assert((0 <= i) && (i < num_state_classes()));
+        return state_classes_.at(i).find(state) != state_classes_.at(i).end();
+    }
+    bool marked(int state) const {
+        for( int i = 0; i < num_state_classes(); ++i ) {
+            if( belong(state, i) )
+                return true;
+        }
+        return false;
+    }
+    void marks(int state, std::vector<int> &m) const {
+        for( int i = 0; i < num_state_classes(); ++i ) {
+            if( belong(state, i) )
+                m.push_back(i);
+        }
+    }
+    const std::set<int>& state_class(int i) const {
+        assert((0 <= i) && (i < num_state_classes()));
+        return state_classes_.at(i);
+    }
+
     bool accept(int state) const {
-        return accept_.find(state) != accept_.end();
+        return belong(state, 0);
     }
     const std::set<int>& accept() const {
-        return accept_;
+        return state_class(0);
     }
 
     int get_label_index(const T &label) const {
@@ -123,18 +148,26 @@ template<typename T> class DFA {
         num_edges_++;
         return dst;
     }
+
+    void mark(int state, int i) {
+        assert((0 <= i) && (i < num_state_classes()));
+        state_classes_[i].insert(state);
+    }
     void mark_as_accept(int state) {
-        assert((0 <= state) && (state < num_states_));
-        accept_.insert(state);
+        mark(state, 0);
     }
 
     void subst_state_name(int q, int nq) {
         if( initial_state_ == q )
             initial_state_ = nq;
-        if( accept(q) ) {
-            accept_.erase(q);
-            accept_.insert(nq);
+
+        for( int i = 0; i < int(state_classes_.size()); ++i ) {
+            if( belong(q, i) ) {
+                state_classes_[i].erase(q);
+                state_classes_[i].insert(nq);
+            }
         }
+
         for( int i = 0; i < num_states_; ++i ) {
             for( size_t j = 0; j < edges_[i].size(); ++j ) {
                 if( edges_[i][j].second == q )
@@ -194,15 +227,27 @@ template<typename T> class DFA {
 
     // output
     void dump(std::ostream &os) const {
-        os << num_states_ << " " << initial_state_ << std::endl;
+        // dump parameters
+        os << num_states_ << " " << initial_state_;
+        if( num_state_classes() > 1 )
+            os << " " << num_state_classes();
+        os << std::endl;
+
+        // dump labels
         os << num_labels_;
         for( typename std::map<T, int>::const_iterator it = labels_map_.begin(); it != labels_map_.end(); ++it )
             os << " " << it->first;
         os << std::endl;
-        os << accept_.size();
-        for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it )
-            os << " " << *it;
-        os << std::endl;
+
+        // dump state classes
+        for( int i = 0; i < int(state_classes_.size()); ++i ) {
+            os << state_classes_[i].size();
+            for( std::set<int>::const_iterator it = state_classes_[i].begin(); it != state_classes_[i].end(); ++it )
+                os << " " << *it;
+            os << std::endl;
+        }
+
+        // dump transitions
         for( int q = 0; q < num_states_; ++q ) {
             os << edges_[q].size();
             for( size_t i = 0; i < edges_[q].size(); ++i ) {
@@ -216,10 +261,17 @@ template<typename T> class DFA {
     void dump_dot(std::ostream &os) const {
         // output comments
         if( initial_state_ != -1 ) os << "// initial state: q" << initial_state_ << std::endl;
-        os << "// accepting states:";
-        for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it )
-            os << " " << *it;
-        os << std::endl;
+
+        for( int i = 0; i < int(state_classes_.size()); ++i ) {
+            if( i == 0 )
+                os << "// accepting states:";
+            else
+                os << "// other state class:";
+            for( std::set<int>::const_iterator it = state_classes_[i].begin(); it != state_classes_[i].end(); ++it )
+                os << " " << *it;
+            os << std::endl;
+        }
+
         for( int q = 0; q < num_states_; ++q ) {
             for( size_t i = 0; i < edges_[q].size(); ++i ) {
                 int label_index = edges_[q][i].first;
@@ -231,18 +283,23 @@ template<typename T> class DFA {
 
         os << "digraph dfa {" << std::endl;
 
-        // initial and accepting states
+        // initial and state classes
         if( initial_state_ != -1 ) os << "    init [shape = point];" << std::endl;
-        for( std::set<int>::const_iterator it = accept_.begin(); it != accept_.end(); ++it ) {
-            os << "    " << *it << " [shape = doublecircle";
-            if( !state_labels_.at(*it).empty() )
-                os << ", label = \"" << state_labels_.at(*it) << "\"";
-            os << "];" << std::endl;
+        for( int i = 0; i < int(state_classes_.size()); ++i ) {
+            for( std::set<int>::const_iterator it = state_classes_[i].begin(); it != state_classes_[i].end(); ++it ) {
+                if( i == 0 )
+                    os << "    " << *it << " [shape = doublecircle";
+                else
+                    os << "    " << *it << " [shape = hexagon";
+                if( !state_labels_.at(*it).empty() )
+                    os << ", label = \"" << state_labels_.at(*it) << "\"";
+                os << "];" << std::endl;
+            }
         }
 
         // other states
         for( int q = 0; q < num_states_; ++q ) {
-            if( !accept(q) ) {
+            if( !marked(q) ) {
                 os << "    " << q << " [shape = circle";
                 if( !state_labels_.at(q).empty() )
                     os << ", label = \"" << state_labels_.at(q) << "\"";
@@ -263,8 +320,22 @@ template<typename T> class DFA {
     }
 
     void read(std::istream &is) {
-        int num_states, initial_state;
-        is >> num_states >> initial_state;
+        // skip over comments in first part of file
+        std::string line;
+        while( getline(is, line) && (line[0] == '#') );
+        assert(!line.empty() && (line[0] != '#'));
+
+        // read parameters
+        std::istringstream iss(line);
+        int num_states, initial_state, num_state_classes;
+        iss >> num_states >> initial_state;
+        if( iss.rdbuf()->in_avail() == 0 ) {
+            std::cout << "HOLA.0" << std::endl;
+            num_state_classes = 1;
+        } else {
+            std::cout << "HOLA.1" << std::endl;
+            iss >> num_state_classes;
+        }
 
         // add states and set initial state
         for( int i = 0; i < num_states; ++i )
@@ -282,13 +353,18 @@ template<typename T> class DFA {
             add_label(label);
         }
 
-        // add accepting states
-        int num_accepting_states;
-        is >> num_accepting_states;
-        for( int i = 0; i < num_accepting_states; ++i ) {
-            int accepting_state;
-            is >> accepting_state;
-            mark_as_accept(accepting_state);
+        // read state classes: first class is accepting states
+        for( int i = 0; i < num_state_classes; ++i ) {
+            assert(state_classes_.size() == i);
+            int num_states_in_class;
+            is >> num_states_in_class;
+            std::set<int> state_class;
+            for( int j = 0; j < num_states_in_class; ++j ) {
+                int state;
+                is >> state;
+                state_class.insert(state);
+            }
+            state_classes_.emplace_back(std::move(state_class));
         }
 
         // read edges
