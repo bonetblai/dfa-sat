@@ -330,10 +330,8 @@ template<typename T> class DFA {
         int num_states, initial_state, num_state_classes;
         iss >> num_states >> initial_state;
         if( iss.rdbuf()->in_avail() == 0 ) {
-            std::cout << "HOLA.0" << std::endl;
             num_state_classes = 1;
         } else {
-            std::cout << "HOLA.1" << std::endl;
             iss >> num_state_classes;
         }
 
