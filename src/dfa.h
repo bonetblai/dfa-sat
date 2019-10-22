@@ -284,13 +284,11 @@ template<typename T> class DFA {
         os << "digraph dfa {" << std::endl;
 
         // initial and state classes
+        const std::vector<std::string> shapes{ "doublecircle", "octagon", "septagon", "hexagon", "pentagon", "square" };
         if( initial_state_ != -1 ) os << "    init [shape = point];" << std::endl;
         for( int i = 0; i < int(state_classes_.size()); ++i ) {
             for( std::set<int>::const_iterator it = state_classes_[i].begin(); it != state_classes_[i].end(); ++it ) {
-                if( i == 0 )
-                    os << "    " << *it << " [shape = doublecircle";
-                else
-                    os << "    " << *it << " [shape = hexagon";
+                os << "    " << *it << " [shape = " << (i < 6 ? shapes.at(i) : shapes.at(5));
                 if( !state_labels_.at(*it).empty() )
                     os << ", label = \"" << state_labels_.at(*it) << "\"";
                 os << "];" << std::endl;
