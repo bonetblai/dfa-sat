@@ -258,7 +258,7 @@ template<typename T> class DFA {
             os << std::endl;
         }
     }
-    void dump_dot(std::ostream &os) const {
+    void dump_dot(std::ostream &os, const std::set<int> &removed_labels, bool use_colors) const {
         // output comments
         if( initial_state_ != -1 ) os << "// initial state: q" << initial_state_ << std::endl;
 
@@ -283,14 +283,21 @@ template<typename T> class DFA {
 
         os << "digraph dfa {" << std::endl;
 
-        // initial and state classes
-        const std::vector<std::string> shapes{ "doublecircle", "octagon", "septagon", "hexagon", "pentagon", "square" };
+        // color scheme for nodes
+        os << "    node [ colorscheme = \"accent8\" ]" << std::endl;
+
+        // initial state
         if( initial_state_ != -1 ) os << "    init [shape = point];" << std::endl;
+
+        // state classes
+        const std::vector<std::string> shapes{ "doublecircle", "octagon", "septagon", "hexagon", "pentagon", "square" };
         for( int i = 0; i < int(state_classes_.size()); ++i ) {
             for( std::set<int>::const_iterator it = state_classes_[i].begin(); it != state_classes_[i].end(); ++it ) {
                 os << "    " << *it << " [shape = " << (i < 6 ? shapes.at(i) : shapes.at(5));
                 if( !state_labels_.at(*it).empty() )
                     os << ", label = \"" << state_labels_.at(*it) << "\"";
+                if( use_colors )
+                    os << ", fillcolor = " << (i < 8 ? 1 + i : 8) << ", style = filled";
                 os << "];" << std::endl;
             }
         }
@@ -308,13 +315,28 @@ template<typename T> class DFA {
         // edges
         for( int q = 0; q < num_states_; ++q ) {
             for( size_t i = 0; i < edges_[q].size(); ++i ) {
-                const T &label = get_label(edges_[q][i].first);
-                int t = edges_[q][i].second;
-                os << "    " << q << " -> " << t << " [label=\"" << label << "\"];" << std::endl;
+                int label_index = edges_[q][i].first;
+                if( removed_labels.find(label_index) == removed_labels.end() ) {
+                    const T &label = get_label(label_index);
+                    int t = edges_[q][i].second;
+                    os << "    " << q << " -> " << t << " [label=\"" << label << "\"];" << std::endl;
+                }
             }
         }
         if( initial_state_ != -1 ) os << "    init -> " << initial_state_ << ";" << std::endl;
         os << "}" << std::endl;
+    }
+    void dump_dot(std::ostream &os, const std::set<std::string> &removed_labels, bool use_colors = false) const {
+        std::set<int> rl;
+        for( std::set<std::string>::const_iterator it = removed_labels.begin(); it != removed_labels.end(); ++it )
+            rl.insert(get_label_index(*it));
+        dump_dot(os, rl, use_colors);
+    }
+    template<typename L> void dump_dot(std::ostream &os, const std::vector<L> &removed_labels, bool use_colors = false) const {
+        dump_dot(os, std::set<T>(removed_labels.begin(), removed_labels.end()), use_colors);
+    }
+    void dump_dot(std::ostream &os, bool use_colors = false) const {
+        dump_dot(os, std::set<int>(), use_colors);
     }
 
     void read(std::istream &is) {
