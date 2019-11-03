@@ -148,6 +148,9 @@ template<typename T> class DFA {
         num_edges_++;
         return dst;
     }
+    void set_label(int src, int edge_index, int label_index) {
+        edges_[src][edge_index].first = label_index;
+    }
 
     void mark(int state, int i) {
         assert((0 <= i) && (i < num_state_classes()));
