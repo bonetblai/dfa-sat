@@ -19,7 +19,9 @@ template<typename T> class DFA {
     int num_labels_;
     int num_edges_;
     int initial_state_;
-    std::vector<std::set<int> > state_classes_; // first one is 'accepting states'
+
+    std::vector<std::set<int> > colors_; // first one is 'accepting states'
+    std::vector<std::pair<int, std::string> > graph_key_;
 
     std::vector<T> labels_;
     std::vector<std::vector<std::pair<int, int> > > edges_;
@@ -33,6 +35,11 @@ template<typename T> class DFA {
         state_labels_ = std::vector<T>(num_states_);
     }
     virtual ~DFA() = default;
+
+    // annotation
+    void add_graph_key(int color, const std::string &key) {
+        graph_key_.emplace_back(color, key);
+    }
 
     // accessors
     int num_states() const {
@@ -57,36 +64,37 @@ template<typename T> class DFA {
         return true;
     }
 
-    int num_state_classes() const {
-        return state_classes_.size();
+    // colors
+    int num_state_colors() const {
+        return colors_.size();
     }
-    bool belong(int state, int i) const {
-        assert((0 <= i) && (i < num_state_classes()));
-        return state_classes_.at(i).find(state) != state_classes_.at(i).end();
+    bool color(int state, int i) const {
+        assert((0 <= i) && (i < num_state_colors()));
+        return colors_.at(i).find(state) != colors_.at(i).end();
     }
-    bool marked(int state) const {
-        for( int i = 0; i < num_state_classes(); ++i ) {
-            if( belong(state, i) )
+    bool painted(int state) const {
+        for( int i = 0; i < num_state_colors(); ++i ) {
+            if( color(state, i) )
                 return true;
         }
         return false;
     }
-    void marks(int state, std::vector<int> &m) const {
-        for( int i = 0; i < num_state_classes(); ++i ) {
-            if( belong(state, i) )
+    void get_colors(int state, std::vector<int> &m) const {
+        for( int i = 0; i < num_state_colors(); ++i ) {
+            if( color(state, i) )
                 m.push_back(i);
         }
     }
-    const std::set<int>& state_class(int i) const {
-        assert((0 <= i) && (i < num_state_classes()));
-        return state_classes_.at(i);
+    const std::set<int>& color_class(int i) const {
+        assert((0 <= i) && (i < num_state_colors()));
+        return colors_.at(i);
     }
 
     bool accept(int state) const {
-        return belong(state, 0);
+        return color(state, 0);
     }
     const std::set<int>& accept() const {
-        return state_class(0);
+        return color_class(0);
     }
 
     int get_label_index(const T &label) const {
@@ -152,22 +160,22 @@ template<typename T> class DFA {
         edges_[src][edge_index].first = label_index;
     }
 
-    void mark(int state, int i) {
-        assert((0 <= i) && (i < num_state_classes()));
-        state_classes_[i].insert(state);
+    void paint(int state, int i) {
+        assert((0 <= i) && (i < num_state_colors()));
+        colors_[i].insert(state);
     }
-    void mark_as_accept(int state) {
-        mark(state, 0);
+    void paint_as_accept(int state) {
+        paint(state, 0);
     }
 
     void subst_state_name(int q, int nq) {
         if( initial_state_ == q )
             initial_state_ = nq;
 
-        for( int i = 0; i < int(state_classes_.size()); ++i ) {
-            if( belong(q, i) ) {
-                state_classes_[i].erase(q);
-                state_classes_[i].insert(nq);
+        for( int i = 0; i < int(colors_.size()); ++i ) {
+            if( color(q, i) ) {
+                colors_[i].erase(q);
+                colors_[i].insert(nq);
             }
         }
 
@@ -232,8 +240,8 @@ template<typename T> class DFA {
     void dump(std::ostream &os) const {
         // dump parameters
         os << num_states_ << " " << initial_state_;
-        if( num_state_classes() > 1 )
-            os << " " << num_state_classes();
+        if( num_state_colors() > 1 )
+            os << " " << num_state_colors();
         os << std::endl;
 
         // dump labels
@@ -242,10 +250,10 @@ template<typename T> class DFA {
             os << " " << it->first;
         os << std::endl;
 
-        // dump state classes
-        for( int i = 0; i < int(state_classes_.size()); ++i ) {
-            os << state_classes_[i].size();
-            for( std::set<int>::const_iterator it = state_classes_[i].begin(); it != state_classes_[i].end(); ++it )
+        // dump color classes
+        for( int i = 0; i < int(colors_.size()); ++i ) {
+            os << colors_[i].size();
+            for( std::set<int>::const_iterator it = colors_[i].begin(); it != colors_[i].end(); ++it )
                 os << " " << *it;
             os << std::endl;
         }
@@ -265,12 +273,12 @@ template<typename T> class DFA {
         // output comments
         if( initial_state_ != -1 ) os << "// initial state: q" << initial_state_ << std::endl;
 
-        for( int i = 0; i < int(state_classes_.size()); ++i ) {
+        for( int i = 0; i < int(colors_.size()); ++i ) {
             if( i == 0 )
                 os << "// accepting states:";
             else
-                os << "// other state class:";
-            for( std::set<int>::const_iterator it = state_classes_[i].begin(); it != state_classes_[i].end(); ++it )
+                os << "// other colors:";
+            for( std::set<int>::const_iterator it = colors_[i].begin(); it != colors_[i].end(); ++it )
                 os << " " << *it;
             os << std::endl;
         }
@@ -287,32 +295,33 @@ template<typename T> class DFA {
         os << "digraph dfa {" << std::endl;
 
         // color scheme for nodes
-        os << "    node [ colorscheme = \"accent8\" ]" << std::endl;
+        os << "    node [colorscheme = \"accent8\", penwidth = 2]" << std::endl;
+        os << "    edge [penwidth = 2]" << std::endl;
 
         // initial state
         if( initial_state_ != -1 ) os << "    init [shape = point];" << std::endl;
 
-        // state classes
-        const std::vector<std::string> shapes{ "doublecircle", "octagon", "septagon", "hexagon", "pentagon", "square" };
-        for( int i = 0; i < int(state_classes_.size()); ++i ) {
-            for( std::set<int>::const_iterator it = state_classes_[i].begin(); it != state_classes_[i].end(); ++it ) {
-                os << "    " << *it << " [shape = " << (i < 6 ? shapes.at(i) : shapes.at(5));
-                if( !state_labels_.at(*it).empty() )
-                    os << ", label = \"" << state_labels_.at(*it) << "\"";
-                if( use_colors )
-                    os << ", fillcolor = " << (i < 8 ? 1 + i : 8) << ", style = filled";
-                os << "];" << std::endl;
-            }
-        }
-
-        // other states
+        // states
         for( int q = 0; q < num_states_; ++q ) {
-            if( !marked(q) ) {
-                os << "    " << q << " [shape = circle";
-                if( !state_labels_.at(q).empty() )
-                    os << ", label = \"" << state_labels_.at(q) << "\"";
-                os << "];" << std::endl;
+            std::vector<int> colors;
+            get_colors(q, colors);
+            os << "    " << q << " [shape = " << (accept(q) ? "doublecircle" : "circle");
+            if( !state_labels_.at(q).empty() )
+                os << ", label = \"" << state_labels_.at(q) << "\"";
+            if( colors.size() == 1 ) {
+                os << ", style = filled, fillcolor = ";
+                assert(colors.at(0) < 8);
+                os << 1 + colors.at(0);
+            } else if( colors.size() > 1 ) {
+                os << ", style = wedged, fillcolor = \"";
+                for( int i = 0; i < int(colors.size()); ++i ) {
+                    assert(i < 8);
+                    os << 1 + colors.at(i);
+                    if( 1 + i < int(colors.size()) ) os << ":";
+                }
+                os << "\"";
             }
+            os << "];" << std::endl;
         }
 
         // edges
@@ -327,6 +336,23 @@ template<typename T> class DFA {
             }
         }
         if( initial_state_ != -1 ) os << "    init -> " << initial_state_ << ";" << std::endl;
+
+        // graph key
+        if( !graph_key_.empty() ) {
+            os << "    subgraph cluster_key {" << std::endl
+               << "        label=\"Key\";" << std::endl
+               << "        fillcolor = gray;" << std::endl
+               << "        style = rounded;" << std::endl
+               << "        bgcolor = gray;" << std::endl
+               << "        node [fontname = \"Courier\", shape = record, style = filled, penwidth = 2];" << std::endl;
+
+            for( int i = 0; i < int(graph_key_.size()); ++i ) {
+                int color = 1 + graph_key_.at(i).first;
+                const std::string &label = graph_key_.at(i).second;
+                os << "        k" << i << " [fillcolor = " << color << ", label = \"" << label << "\"];" << std::endl;
+            }
+            os << "    };" << std::endl;
+        }
         os << "}" << std::endl;
     }
     void dump_dot(std::ostream &os, const std::set<std::string> &removed_labels, bool use_colors = false) const {
@@ -342,20 +368,21 @@ template<typename T> class DFA {
         dump_dot(os, std::set<int>(), use_colors);
     }
 
-    void read(std::istream &is) {
+    void read(std::istream &is, std::vector<std::string> &comments) {
         // skip over comments in first part of file
         std::string line;
-        while( getline(is, line) && (line[0] == '#') );
+        while( getline(is, line) && (line[0] == '#') )
+            comments.emplace_back(std::move(line));
         assert(!line.empty() && (line[0] != '#'));
 
         // read parameters
         std::istringstream iss(line);
-        int num_states, initial_state, num_state_classes;
+        int num_states, initial_state, num_state_colors;
         iss >> num_states >> initial_state;
         if( iss.rdbuf()->in_avail() == 0 ) {
-            num_state_classes = 1;
+            num_state_colors = 1;
         } else {
-            iss >> num_state_classes;
+            iss >> num_state_colors;
         }
 
         // add states and set initial state
@@ -374,18 +401,18 @@ template<typename T> class DFA {
             add_label(label);
         }
 
-        // read state classes: first class is accepting states
-        for( int i = 0; i < num_state_classes; ++i ) {
-            assert(state_classes_.size() == i);
-            int num_states_in_class;
-            is >> num_states_in_class;
-            std::set<int> state_class;
-            for( int j = 0; j < num_states_in_class; ++j ) {
+        // read state colors: first color is accepting states
+        for( int i = 0; i < num_state_colors; ++i ) {
+            assert(colors_.size() == i);
+            int num_states_in_color;
+            is >> num_states_in_color;
+            std::set<int> color_class;
+            for( int j = 0; j < num_states_in_color; ++j ) {
                 int state;
                 is >> state;
-                state_class.insert(state);
+                color_class.insert(state);
             }
-            state_classes_.emplace_back(std::move(state_class));
+            colors_.emplace_back(std::move(color_class));
         }
 
         // read edges
@@ -407,10 +434,14 @@ template<typename T> class DFA {
             }
         }
     }
-    static const DFA<T>* read_dump(std::istream &is) {
+    static const DFA<T>* read_dump(std::istream &is, std::vector<std::string> &comments) {
         DFA<T> *dfa = new DFA();
-        dfa->read(is);
+        dfa->read(is, comments);
         return dfa;
+    }
+    static const DFA<T>* read_dump(std::istream &is) {
+        std::vector<std::string> comments;
+        return read_dump(is, comments);
     }
 };
 
