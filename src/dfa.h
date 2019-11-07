@@ -403,7 +403,7 @@ template<typename T> class DFA {
 
         // read state colors: first color is accepting states
         for( int i = 0; i < num_state_colors; ++i ) {
-            assert(colors_.size() == i);
+            assert(int(colors_.size()) == i);
             int num_states_in_color;
             is >> num_states_in_color;
             std::set<int> color_class;
