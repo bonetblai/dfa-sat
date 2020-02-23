@@ -6,6 +6,7 @@
 #include <deque>
 #include <map>
 #include <set>
+#include <sstream>
 #include <vector>
 
 #include "graph.h"
