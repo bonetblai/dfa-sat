@@ -29,9 +29,12 @@ template<typename T> class DFA {
     std::map<T, int> labels_map_;
     std::vector<T> state_labels_;
 
+    int num_eq_classes_;
+    std::vector<int> eq_classes_;
+
   public:
     DFA(int num_states = 0)
-      : num_states_(num_states), num_labels_(0), num_edges_(0), initial_state_(-1) {
+      : num_states_(num_states), num_labels_(0), num_edges_(0), initial_state_(-1), num_eq_classes_(0) {
         edges_ = std::vector<std::vector<std::pair<int, int> > >(num_states_);
         state_labels_ = std::vector<T>(num_states_);
     }
@@ -98,6 +101,18 @@ template<typename T> class DFA {
         return color_class(0);
     }
 
+    // eq classes
+    int num_eq_classes() const {
+        return num_eq_classes_;
+    }
+    int eq_class(int state) const {
+        return eq_classes_.at(state);
+    }
+    bool equivalent(int state1, int state2) const {
+        return eq_class(state1) == eq_class(state2);
+    }
+
+    // labels
     int get_label_index(const T &label) const {
         typename std::map<T, int>::const_iterator it = labels_map_.find(label);
         return it == labels_map_.end() ? -1 : it->second;
@@ -110,6 +125,7 @@ template<typename T> class DFA {
         return labels_;
     }
 
+    // edges
     int edge(int src, int label_index) const {
         assert((0 <= src) && (src < num_states_));
         for( size_t i = 0; i < edges_[src].size(); ++i ) {
@@ -161,6 +177,7 @@ template<typename T> class DFA {
         edges_[src][edge_index].first = label_index;
     }
 
+    // colors
     void paint(int state, int i) {
         assert((0 <= i) && (i < num_state_colors()));
         colors_[i].insert(state);
@@ -169,6 +186,18 @@ template<typename T> class DFA {
         paint(state, 0);
     }
 
+    // eq classes
+    void initialize_eq_classes(int num_eq_classes) {
+        assert(num_eq_classes > 0);
+        num_eq_classes_ = num_eq_classes;
+        eq_classes_ = std::vector<int>(num_states(), -1);
+    }
+    int set_eq_class(int state, int eq_class) {
+        assert((0 <= eq_class) && (eq_class < num_eq_classes_));
+        eq_classes_.at(state) = eq_class;
+    }
+
+    // rename state
     void subst_state_name(int q, int nq) {
         if( initial_state_ == q )
             initial_state_ = nq;
@@ -239,11 +268,13 @@ template<typename T> class DFA {
 
     // output
     void dump(std::ostream &os) const {
-        // dump parameters
-        os << num_states_ << " " << initial_state_;
-        if( num_state_colors() > 1 )
-            os << " " << num_state_colors();
-        os << std::endl;
+        // dump header
+        os << "dfa"
+           << " " << num_states_
+           << " " << initial_state_
+           << " " << num_state_colors()
+           << " " << num_eq_classes()
+           << std::endl;
 
         // dump labels
         os << num_labels_;
@@ -261,6 +292,8 @@ template<typename T> class DFA {
 
         // dump transitions
         for( int q = 0; q < num_states_; ++q ) {
+            assert((num_eq_classes() == 0) || (eq_class(q) != -1));
+            if( num_eq_classes() > 0 ) os << eq_class(q) << " ";
             os << edges_[q].size();
             for( size_t i = 0; i < edges_[q].size(); ++i ) {
                 const T &label = get_label(edges_[q][i].first);
@@ -376,14 +409,20 @@ template<typename T> class DFA {
             comments.emplace_back(std::move(line));
         assert(!line.empty() && (line[0] != '#'));
 
-        // read parameters
+        // read header
         std::istringstream iss(line);
-        int num_states, initial_state, num_state_colors;
+
+        std::string magic_word;
+        iss >> magic_word;
+        assert(magic_word == "dfa");
+
+        int num_states, initial_state, num_state_colors, num_eq_classes;
         iss >> num_states >> initial_state;
         if( iss.rdbuf()->in_avail() == 0 ) {
             num_state_colors = 1;
+            num_eq_classes = 0;
         } else {
-            iss >> num_state_colors;
+            iss >> num_state_colors >> num_eq_classes;
         }
 
         // add states and set initial state
@@ -416,8 +455,17 @@ template<typename T> class DFA {
             colors_.emplace_back(std::move(color_class));
         }
 
+        // read equivalence classes
+        if( num_eq_classes != 0 )
+            initialize_eq_classes(num_eq_classes);
+
         // read edges
         for( int src = 0; src < num_states; ++src ) {
+            if( num_eq_classes != 0 ) {
+                int eq_class;
+                is >> eq_class;
+                set_eq_class(src, eq_class);
+            }
             int num_edges;
             is >> num_edges;
             for( int i = 0; i < num_edges; ++i ) {

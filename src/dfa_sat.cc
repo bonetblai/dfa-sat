@@ -354,7 +354,7 @@ class Theory : public SAT::Theory {
         // set initial and accepting states
         dfa.set_initial_state(colors[apta_.initial_vertex()]);
         for( set<int>::const_iterator it = apta_.accept().begin(); it != apta_.accept().end(); ++it )
-            dfa.mark_as_accept(colors[*it]);
+            dfa.paint_as_accept(colors[*it]);
 
         // simplify
         dfa.remove_redundant_non_accepting_states();
