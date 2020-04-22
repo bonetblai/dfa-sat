@@ -188,7 +188,6 @@ template<typename T> class DFA {
 
     // eq classes
     void initialize_eq_classes(int num_eq_classes) {
-        assert(num_eq_classes > 0);
         num_eq_classes_ = num_eq_classes;
         eq_classes_ = std::vector<int>(num_states(), -1);
     }
@@ -455,9 +454,8 @@ template<typename T> class DFA {
             colors_.emplace_back(std::move(color_class));
         }
 
-        // read equivalence classes
-        if( num_eq_classes != 0 )
-            initialize_eq_classes(num_eq_classes);
+        // initialize equivalence classes
+        initialize_eq_classes(num_eq_classes);
 
         // read edges
         for( int src = 0; src < num_states; ++src ) {
