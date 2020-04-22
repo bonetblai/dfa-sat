@@ -192,7 +192,7 @@ template<typename T> class DFA {
         num_eq_classes_ = num_eq_classes;
         eq_classes_ = std::vector<int>(num_states(), -1);
     }
-    int set_eq_class(int state, int eq_class) {
+    void set_eq_class(int state, int eq_class) {
         assert((0 <= eq_class) && (eq_class < num_eq_classes_));
         eq_classes_.at(state) = eq_class;
     }
