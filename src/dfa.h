@@ -192,6 +192,7 @@ template<typename T> class DFA {
         eq_classes_ = std::vector<int>(num_states(), -1);
     }
     void set_eq_class(int state, int eq_class) {
+std::cout << "CLASS: s=" << state << ", eqc=" << eq_class << std::endl;
         assert((0 <= eq_class) && (eq_class < num_eq_classes_));
         eq_classes_.at(state) = eq_class;
     }
@@ -426,7 +427,7 @@ template<typename T> class DFA {
          if( iss.rdbuf()->in_avail() == 0 )
              num_eq_classes = 0;
          else
-             is >> num_eq_classes;
+             iss >> num_eq_classes;
 
         // add states and set initial state
         for( int i = 0; i < num_states; ++i )
