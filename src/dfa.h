@@ -417,12 +417,16 @@ template<typename T> class DFA {
 
         int num_states, initial_state, num_state_colors, num_eq_classes;
         iss >> num_states >> initial_state;
-        if( iss.rdbuf()->in_avail() == 0 ) {
-            num_state_colors = 1;
-            num_eq_classes = 0;
-        } else {
-            iss >> num_state_colors >> num_eq_classes;
-        }
+
+         if( iss.rdbuf()->in_avail() == 0 )
+             num_state_colors = 1;
+         else
+             iss >> num_state_colors;
+
+         if( iss.rdbuf()->in_avail() == 0 )
+             num_eq_classes = 0;
+         else
+             is >> num_eq_classes;
 
         // add states and set initial state
         for( int i = 0; i < num_states; ++i )
