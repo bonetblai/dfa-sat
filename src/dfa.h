@@ -38,7 +38,25 @@ template<typename T> class DFA {
         edges_ = std::vector<std::vector<std::pair<int, int> > >(num_states_);
         state_labels_ = std::vector<T>(num_states_);
     }
+    DFA(const DFA<T> &dfa)
+      : num_states_(dfa.num_states_),
+        num_labels_(dfa.num_labels_),
+        num_edges_(dfa.num_edges_),
+        initial_state_(dfa.initial_state_),
+        colors_(dfa.colors_),
+        graph_key_(dfa.graph_key_),
+        labels_(dfa.labels_),
+        edges_(dfa.edges_),
+        labels_map_(dfa.labels_map_),
+        state_labels_(dfa.state_labels_),
+        num_eq_classes_(dfa.num_eq_classes_),
+        eq_classes_(dfa.eq_classes_) {
+    }
     virtual ~DFA() = default;
+
+    DFA<T>* clone() const {
+        return new DFA<T>(*this);
+    }
 
     // annotation
     void add_graph_key(int color, const std::string &key) {
@@ -302,7 +320,7 @@ template<typename T> class DFA {
             os << std::endl;
         }
     }
-    void dump_dot(std::ostream &os, const std::set<int> &removed_labels, bool use_colors) const {
+    void dump_dot(std::ostream &os, const std::set<int> &removed_labels, const std::set<std::pair<std::pair<int, int>, std::string> > &selected_edges, bool use_colors) const {
         // output comments
         if( initial_state_ != -1 ) os << "// initial state: q" << initial_state_ << std::endl;
 
@@ -364,7 +382,13 @@ template<typename T> class DFA {
                 if( removed_labels.find(label_index) == removed_labels.end() ) {
                     const T &label = get_label(label_index);
                     int t = edges_[q][i].second;
-                    os << "    " << q << " -> " << t << " [label=\"" << label << "\"];" << std::endl;
+                    //os << "    " << q << " -> " << t << " [label=\"" << label << "\"];" << std::endl;
+                    os << "    " << q << " -> " << t << " [label=\"" << label << "\"";
+                    std::pair<std::pair<int, int>, T> edge({ q, t }, label);
+                    if( selected_edges.find(edge) == selected_edges.end() )
+                        //os << ", fontcolor = \"blue\", color = \"blue\"";
+                        os << ", style=dotted";
+                    os << "];" << std::endl;
                 }
             }
         }
@@ -390,15 +414,20 @@ template<typename T> class DFA {
     }
     void dump_dot(std::ostream &os, const std::set<std::string> &removed_labels, bool use_colors = false) const {
         std::set<int> rl;
+        std::set<std::pair<std::pair<int, int>, std::string> > selected_edges;
         for( std::set<std::string>::const_iterator it = removed_labels.begin(); it != removed_labels.end(); ++it )
             rl.insert(get_label_index(*it));
-        dump_dot(os, rl, use_colors);
+        dump_dot(os, rl, selected_edges, use_colors);
     }
-    template<typename L> void dump_dot(std::ostream &os, const std::vector<L> &removed_labels, bool use_colors = false) const {
-        dump_dot(os, std::set<T>(removed_labels.begin(), removed_labels.end()), use_colors);
+    template<typename L> void dump_dot(std::ostream &os, const std::vector<L> &removed_labels, const std::set<std::pair<std::pair<int, int>, std::string> > &selected_edges, bool use_colors = false) const {
+        dump_dot(os, std::set<T>(removed_labels.begin(), removed_labels.end()), selected_edges, use_colors);
     }
     void dump_dot(std::ostream &os, bool use_colors = false) const {
         dump_dot(os, std::set<int>(), use_colors);
+    }
+
+    void dump_dot(std::ostream &os, const std::set<std::pair<std::pair<int, int>, std::string> > &selected_edges, bool use_colors = false) const {
+        dump_dot(os, std::set<int>{ }, selected_edges, use_colors);
     }
 
     void read(std::istream &is, std::vector<std::string> &comments) {
