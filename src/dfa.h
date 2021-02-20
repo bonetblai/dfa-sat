@@ -196,7 +196,9 @@ template<typename T> class DFA {
     }
 
     // colors
-    void paint(int state, int i) {
+    void paint(int state, int i, bool add_colors = false) {
+        while( add_colors && (i >= num_state_colors()) )
+            colors_.emplace_back();
         assert((0 <= i) && (i < num_state_colors()));
         colors_[i].insert(state);
     }
