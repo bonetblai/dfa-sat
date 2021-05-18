@@ -425,7 +425,7 @@ template<typename T> class DFA {
         dump_dot(os, std::set<T>(removed_labels.begin(), removed_labels.end()), selected_edges, use_colors);
     }
     void dump_dot(std::ostream &os, bool use_colors = false) const {
-        dump_dot(os, std::set<int>(), use_colors);
+        dump_dot(os, std::set<std::string>{ }, use_colors);
     }
 
     void dump_dot(std::ostream &os, const std::set<std::pair<std::pair<int, int>, std::string> > &selected_edges, bool use_colors = false) const {
