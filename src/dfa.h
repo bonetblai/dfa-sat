@@ -197,7 +197,7 @@ template<typename T> class DFA {
 
     // colors
     void paint(int state, int i, bool add_colors = false) {
-        while( add_colors && (i >= num_state_colors()) )
+        while( i >= num_state_colors() )
             colors_.emplace_back();
         assert((0 <= i) && (i < num_state_colors()));
         colors_[i].insert(state);
@@ -389,7 +389,7 @@ template<typename T> class DFA {
                     std::pair<std::pair<int, int>, T> edge({ q, t }, label);
                     if( selected_edges.find(edge) == selected_edges.end() )
                         //os << ", fontcolor = \"blue\", color = \"blue\"";
-                        os << ", style=dotted";
+                        os << ", style=solid";
                     os << "];" << std::endl;
                 }
             }
